@@ -39,7 +39,7 @@ function renderQR(qr: string): void {
  */
 export function registerLoginCommand(program: Command): void {
   program
-    .command('login')
+    .command('whatsapp-start')
     .description('Connect WhatsApp by scanning QR code (runs in foreground)')
     .action(async () => {
       // Ensure .relay-agent directory exists

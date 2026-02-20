@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import readline from 'node:readline';
-import { daemonRequest, handleDaemonError } from './client.js';
+import { daemonRequest, handleDaemonError, handleHttpError } from './client.js';
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({
@@ -39,9 +39,7 @@ export function registerInitCommand(program: Command): void {
         });
 
         if (res.status >= 400) {
-          const errorData = res.data as { error?: string };
-          console.error(`Error: ${errorData.error ?? 'Unknown error'}`);
-          process.exit(1);
+          handleHttpError(res.status, res.data, 'Failed to initialize');
         }
 
         const data = res.data as { whatsapp_qr_displayed?: boolean };

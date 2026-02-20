@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { daemonRequest, handleDaemonError } from './client.js';
+import { daemonRequest, handleDaemonError, handleHttpError } from './client.js';
 import type { ConversationInstance } from '../types.js';
 
 export function registerPauseCommand(program: Command): void {
@@ -14,9 +14,7 @@ export function registerPauseCommand(program: Command): void {
         );
 
         if (res.status >= 400) {
-          const errorData = res.data as unknown as { error?: string };
-          console.error(`Error: ${errorData.error ?? 'Failed to pause instance'}`);
-          process.exit(1);
+          handleHttpError(res.status, res.data, 'Failed to pause instance');
         }
 
         const instance = res.data;

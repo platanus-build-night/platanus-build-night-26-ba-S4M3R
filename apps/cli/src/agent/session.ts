@@ -235,7 +235,42 @@ export async function processMessage(
 
   // Feed the message to the pi-mono agent. It will invoke tools as needed
   // (send_message, mark_todo_item, etc.) internally.
-  await session.prompt(`Contact says: ${message}`);
+  try {
+    await session.prompt(`Contact says: ${message}`);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    const isTimeout = errMsg.toLowerCase().includes('timeout') || errMsg.toLowerCase().includes('timed out');
+    const isRateLimit = errMsg.toLowerCase().includes('rate limit') || errMsg.toLowerCase().includes('429');
+    const isAuthFailure = errMsg.toLowerCase().includes('401') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('invalid api key');
+
+    if (isTimeout) {
+      logger.warn({ instanceId, error: errMsg }, 'Agent LLM timeout, retrying once');
+      try {
+        await session.prompt(`Contact says: ${message}`);
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : 'Unknown error';
+        logger.error({ instanceId, error: retryMsg }, 'Agent LLM retry failed, requesting human intervention');
+        await deps.transition(instanceId, 'request_intervention');
+        return;
+      }
+    } else if (isRateLimit) {
+      logger.error({ instanceId, error: errMsg }, 'Agent LLM rate limited, requesting human intervention');
+      await deps.transition(instanceId, 'request_intervention');
+      return;
+    } else if (isAuthFailure) {
+      logger.error({ instanceId, error: errMsg }, 'Agent LLM auth failure, requesting human intervention');
+      await deps.transition(instanceId, 'request_intervention');
+      return;
+    } else {
+      logger.error({ instanceId, error: errMsg }, 'Agent LLM unrecoverable error');
+      const failResult = await deps.transition(instanceId, 'unrecoverable_error');
+      if (!failResult.success) {
+        // If unrecoverable_error transition is not valid from current state, try request_intervention
+        await deps.transition(instanceId, 'request_intervention');
+      }
+      return;
+    }
+  }
 
   // Trigger state transition: agent has processed the reply
   const result = await deps.transition(instanceId, 'agent_processes_reply');
@@ -276,6 +311,18 @@ export function hasSession(instanceId: string): boolean {
  */
 export function getSessionCount(): number {
   return sessions.size;
+}
+
+/**
+ * Destroys all active agent sessions. Used during daemon shutdown.
+ */
+export function destroyAllSessions(): void {
+  const count = sessions.size;
+  for (const instanceId of sessions.keys()) {
+    logger.info({ instanceId }, 'Agent session destroyed (shutdown)');
+  }
+  sessions.clear();
+  logger.info({ count }, `Destroyed ${count} agent sessions during shutdown`);
 }
 
 // ============================================

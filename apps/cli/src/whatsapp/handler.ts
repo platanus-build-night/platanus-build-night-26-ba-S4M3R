@@ -120,8 +120,11 @@ async function handleIncomingMessage(
         const errMsg = err instanceof Error ? err.message : 'Unknown error';
         logger.error(
           { instanceId: instance.id, error: errMsg },
-          'Agent failed to process incoming message',
+          'Agent failed to process incoming message; instance remains in current state',
         );
+        // Agent error handling (NEEDS_HUMAN_INTERVENTION transition) is done
+        // inside processWithAgent/processMessage. If we reach here, the error
+        // was already handled or the instance state was already updated.
       }
 
       // Schedule a new heartbeat (agent may have sent a response, now waiting for reply)

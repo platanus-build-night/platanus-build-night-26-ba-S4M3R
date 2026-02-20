@@ -71,6 +71,30 @@ export function cancelHeartbeat(instanceId: string): void {
  * - If at/over max_followups: transitions to ABANDONED.
  */
 async function onHeartbeatFire(instanceId: string): Promise<void> {
+  try {
+    await executeHeartbeat(instanceId);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    logger.error(
+      { instanceId, error: errMsg },
+      'Unhandled error in heartbeat fire handler; rescheduling',
+    );
+    // Attempt to reschedule so the instance is not orphaned
+    try {
+      const instance = await InstanceStore.getById(instanceId);
+      if (instance) {
+        scheduleHeartbeat(instanceId, instance.heartbeat_config.interval_ms);
+      }
+    } catch (rescheduleErr) {
+      logger.error(
+        { instanceId, error: rescheduleErr instanceof Error ? rescheduleErr.message : 'Unknown' },
+        'Failed to reschedule heartbeat after error',
+      );
+    }
+  }
+}
+
+async function executeHeartbeat(instanceId: string): Promise<void> {
   const instance = await InstanceStore.getById(instanceId);
   if (!instance) {
     logger.warn(

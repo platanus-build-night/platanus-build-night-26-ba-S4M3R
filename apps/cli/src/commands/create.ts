@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { daemonRequest, handleDaemonError } from './client.js';
+import { daemonRequest, handleDaemonError, handleHttpError } from './client.js';
 import type { CreateInstanceRequest, CreateInstanceResponse } from '../types.js';
 
 export function registerCreateCommand(program: Command): void {
@@ -50,9 +50,7 @@ export function registerCreateCommand(program: Command): void {
           const res = await daemonRequest<CreateInstanceResponse>('POST', '/instances', body);
 
           if (res.status >= 400) {
-            const errorData = res.data as unknown as { error?: string };
-            console.error(`Error: ${errorData.error ?? 'Failed to create instance'}`);
-            process.exit(1);
+            handleHttpError(res.status, res.data, 'Failed to create instance');
           }
 
           const data = res.data;

@@ -88,8 +88,15 @@ export async function startServer(): Promise<http.Server> {
   });
 
   return new Promise((resolve, reject) => {
-    server.on('error', (err) => {
-      logger.error({ error: err.message }, 'Server failed to start');
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.error(
+          { port: PORT, host: HOST },
+          `Port ${PORT} is already in use. Stop the conflicting process or configure a different port.`,
+        );
+      } else {
+        logger.error({ error: err.message }, 'Server failed to start');
+      }
       reject(err);
     });
 

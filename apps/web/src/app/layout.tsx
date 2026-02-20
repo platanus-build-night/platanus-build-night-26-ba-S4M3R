@@ -9,7 +9,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "relay",
+  title: "relay-agent",
   description: "A separate agent for talking with the real world.",
 };
 

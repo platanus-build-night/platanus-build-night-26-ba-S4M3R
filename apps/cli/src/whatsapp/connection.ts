@@ -73,7 +73,6 @@ export async function connectWhatsApp(): Promise<void> {
 
   const sock = makeWASocket({
     auth: state,
-    printQRInTerminal: true,
     logger: baileysLogger as never, // Baileys expects pino logger; cast to satisfy strict mode
   });
 

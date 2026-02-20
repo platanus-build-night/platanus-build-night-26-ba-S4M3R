@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import path from 'node:path';
 import fs from 'node:fs';
+import pino from 'pino';
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -9,6 +10,25 @@ import makeWASocket, {
 import type { Boom } from '@hapi/boom';
 
 const AUTH_DIR = path.resolve('.relay-agent', 'whatsapp-auth');
+
+/**
+ * Render a QR code in the terminal using Unicode block characters.
+ * No external dependency needed.
+ */
+function renderQR(qr: string): void {
+  // Dynamic import qrcode-terminal if available, otherwise instruct user
+  import('qrcode-terminal').then((mod) => {
+    const qrterm = mod.default ?? mod;
+    qrterm.generate(qr, { small: true }, (output: string) => {
+      console.log(output);
+    });
+  }).catch(() => {
+    // Fallback: just print the raw QR string for manual use
+    console.log('\nQR Code (scan with WhatsApp):');
+    console.log(qr);
+    console.log('\nTip: install qrcode-terminal for a visual QR code\n');
+  });
+}
 
 /**
  * `relay login` - Interactive WhatsApp authentication.
@@ -29,14 +49,16 @@ export function registerLoginCommand(program: Command): void {
       }
 
       console.log('Starting WhatsApp authentication...');
-      console.log('Scan the QR code below with your WhatsApp app:\n');
+      console.log('A QR code will appear below. Scan it with your WhatsApp app.\n');
 
       const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
+      // Baileys v7 requires a real pino logger instance
+      const baileysLogger = pino({ level: 'silent' });
+
       const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
-        logger: { level: 'silent', child: () => ({ level: 'silent' }) } as never,
+        logger: baileysLogger as never,
       });
 
       sock.ev.on('creds.update', saveCreds);
@@ -48,13 +70,21 @@ export function registerLoginCommand(program: Command): void {
         }, 120_000);
 
         sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
-          const { connection, lastDisconnect } = update;
+          const { connection, lastDisconnect, qr } = update;
+
+          // Handle QR code - render it ourselves since printQRInTerminal is deprecated
+          if (qr) {
+            console.clear();
+            console.log('Scan this QR code with WhatsApp:\n');
+            renderQR(qr);
+            console.log('\nWaiting for scan...');
+          }
 
           if (connection === 'open') {
             clearTimeout(timeout);
             console.log('\nWhatsApp connected successfully!');
             console.log('Auth state saved. The daemon will use this on next start.');
-            console.log('\nYou can now close this and run: relay start');
+            console.log('\nYou can now run: relay start');
 
             // Give it a moment to save creds then disconnect
             setTimeout(() => {

@@ -1,0 +1,13 @@
+{
+  "name": "cape-town",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev:web": "npm run dev -w apps/web",
+    "dev:cli": "npm run dev -w apps/cli",
+    "build": "npm run build --workspaces",
+    "build:web": "npm run build -w apps/web",
+    "build:cli": "npm run build -w apps/cli"
+  }
+}

@@ -14,6 +14,12 @@ import * as TranscriptStore from '../store/transcripts.js';
 import * as ConfigStore from '../store/config.js';
 import { transition } from '../engine/state-machine.js';
 import type { StateEvent } from '../types.js';
+import {
+  connectWhatsApp,
+  isConnected,
+  sendMessage as sendWhatsAppMessage,
+  phoneToJid,
+} from '../whatsapp/connection.js';
 import logger from '../utils/logger.js';
 
 // ============================================
@@ -81,8 +87,8 @@ export function setServerStartTime(time: number): void {
 
 /**
  * POST /init
- * Save config (model_api_key, model_provider).
- * WhatsApp QR wiring deferred to Phase 2.
+ * Save config (model_api_key, model_provider) and trigger WhatsApp connection.
+ * The QR code is printed directly in the daemon's terminal by Baileys.
  */
 async function handleInit(body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
   const { model_api_key, model_provider } = body;
@@ -94,15 +100,22 @@ async function handleInit(body: Record<string, unknown>, res: http.ServerRespons
     await ConfigStore.updateConfig({ model_provider });
   }
 
-  sendJson(res, 200, { whatsapp_qr_displayed: false });
+  // Trigger WhatsApp connection/reconnection
+  try {
+    await connectWhatsApp();
+    sendJson(res, 200, { whatsapp_qr_displayed: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    logger.error({ error: message }, 'Failed to initiate WhatsApp connection');
+    sendJson(res, 200, { whatsapp_qr_displayed: false, error: message });
+  }
 }
 
 /**
  * GET /status
- * Return DaemonStatusResponse with pid, uptime, whatsapp state, instance counts.
+ * Return DaemonStatusResponse with pid, uptime, real WhatsApp connection state, instance counts.
  */
 async function handleGetStatus(res: http.ServerResponse): Promise<void> {
-  const config = await ConfigStore.getConfig();
   const allInstances = await InstanceStore.getAll();
 
   const terminalStates = new Set(['COMPLETED', 'ABANDONED', 'FAILED']);
@@ -113,7 +126,7 @@ async function handleGetStatus(res: http.ServerResponse): Promise<void> {
   const status: DaemonStatusResponse = {
     pid: process.pid,
     uptime_seconds: uptimeSeconds,
-    whatsapp_connected: config.whatsapp_connected,
+    whatsapp_connected: isConnected(),
     active_instance_count: activeCount,
     total_instance_count: allInstances.length,
   };
@@ -293,8 +306,7 @@ async function handleResume(id: string, res: http.ServerResponse): Promise<void>
 
 /**
  * POST /instances/:id/send
- * Manual message injection -- store in transcript as 'manual' role.
- * WhatsApp delivery wired in Phase 2.
+ * Manual message injection -- store in transcript as 'manual' role and deliver via WhatsApp.
  */
 async function handleSend(id: string, body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
   const instance = await InstanceStore.getById(id);
@@ -309,6 +321,22 @@ async function handleSend(id: string, body: Record<string, unknown>, res: http.S
     return;
   }
 
+  // Send via WhatsApp if connected
+  if (isConnected()) {
+    try {
+      const jid = phoneToJid(instance.target_contact);
+      await sendWhatsAppMessage(jid, message);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      logger.error({ instanceId: id, error: errMsg }, 'Failed to send message via WhatsApp');
+      sendError(res, 500, 'Failed to send message via WhatsApp', errMsg);
+      return;
+    }
+  } else {
+    sendError(res, 503, 'WhatsApp is not connected. Run `relay init` to connect.');
+    return;
+  }
+
   const transcriptMessage: Omit<TranscriptMessage, 'id'> = {
     instance_id: id,
     role: 'manual',
@@ -318,7 +346,7 @@ async function handleSend(id: string, body: Record<string, unknown>, res: http.S
 
   const savedMessage = await TranscriptStore.append(transcriptMessage);
 
-  logger.debug({ instanceId: id, messageId: savedMessage.id }, 'Manual message appended to transcript');
+  logger.debug({ instanceId: id, messageId: savedMessage.id }, 'Manual message sent via WhatsApp and appended to transcript');
   sendJson(res, 200, savedMessage);
 }
 

@@ -1,10 +1,10 @@
 {
-  "name": "@cape-town/cli",
+  "name": "relay-agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "cape-town": "./dist/index.js"
+    "relay": "./dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -12,10 +12,17 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "chalk": "^5.4.1"
+    "commander": "^12",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "lowdb": "^7",
+    "pino": "^9",
+    "pino-pretty": "^11",
+    "@mariozechner/pi-coding-agent": "*",
+    "uuid": "^9"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/uuid": "^9",
     "tsx": "^4",
     "typescript": "^5"
   }

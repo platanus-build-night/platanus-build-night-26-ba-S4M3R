@@ -20,6 +20,9 @@ import {
   sendMessage as sendWhatsAppMessage,
   phoneToJid,
 } from '../whatsapp/connection.js';
+import { enqueueOrActivate, onInstanceTerminal } from '../engine/queue.js';
+import { cancelHeartbeat, scheduleHeartbeat, suspendHeartbeat, resumeHeartbeat, getActiveTimerCount } from '../engine/heartbeat.js';
+import { createSession, processWithAgent, destroySession, getSessionCount } from '../agent/session.js';
 import logger from '../utils/logger.js';
 
 // ============================================
@@ -123,12 +126,14 @@ async function handleGetStatus(res: http.ServerResponse): Promise<void> {
 
   const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
 
-  const status: DaemonStatusResponse = {
+  const status: DaemonStatusResponse & { active_timer_count: number; session_count: number } = {
     pid: process.pid,
     uptime_seconds: uptimeSeconds,
     whatsapp_connected: isConnected(),
     active_instance_count: activeCount,
     total_instance_count: allInstances.length,
+    active_timer_count: getActiveTimerCount(),
+    session_count: getSessionCount(),
   };
 
   sendJson(res, 200, status);
@@ -198,12 +203,43 @@ async function handleCreateInstance(body: Record<string, unknown>, res: http.Ser
 
   const instance = await InstanceStore.create(instanceData);
 
+  logger.info({ instanceId: instance.id, state: instance.state }, 'Instance created');
+
+  // Check concurrency: queue if contact already has an active instance
+  let finalState = instance.state;
+  try {
+    const queueResult = await enqueueOrActivate(instance);
+    finalState = queueResult;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    logger.error({ instanceId: instance.id, error: errMsg }, 'Failed to enqueue/activate instance');
+  }
+
+  // If not queued, auto-activate: agent sends first message
+  if (finalState === 'CREATED') {
+    try {
+      // Transition CREATED -> ACTIVE
+      await transition(instance.id, 'agent_sends_first_message');
+
+      // Create agent session and let agent send the first message
+      await createSession(instance);
+      await processWithAgent(instance.id, 'You are starting a new conversation. Send your first message to the contact to begin working on the objective.');
+
+      // Schedule initial heartbeat
+      scheduleHeartbeat(instance.id, instance.heartbeat_config.interval_ms);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      logger.error({ instanceId: instance.id, error: errMsg }, 'Failed to auto-activate instance');
+    }
+  }
+
+  // Fetch updated instance to return actual state
+  const updatedInstance = await InstanceStore.getById(instance.id);
   const response: CreateInstanceResponse = {
     id: instance.id,
-    state: instance.state,
+    state: updatedInstance?.state ?? finalState,
   };
 
-  logger.info({ instanceId: instance.id, state: instance.state }, 'Instance created');
   sendJson(res, 201, response);
 }
 
@@ -261,6 +297,9 @@ async function handleCancel(id: string, res: http.ServerResponse): Promise<void>
     return;
   }
 
+  // Terminal state cleanup (heartbeat cancel, session destroy, queue dequeue)
+  // is handled automatically by the terminal state hook in the state machine.
+
   sendJson(res, 200, result.instance);
 }
 
@@ -281,6 +320,14 @@ async function handlePause(id: string, res: http.ServerResponse): Promise<void> 
     return;
   }
 
+  // Suspend heartbeat timer while paused
+  try {
+    suspendHeartbeat(id);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    logger.error({ instanceId: id, error: errMsg }, 'Error suspending heartbeat on pause');
+  }
+
   sendJson(res, 200, result.instance);
 }
 
@@ -299,6 +346,14 @@ async function handleResume(id: string, res: http.ServerResponse): Promise<void>
   if (!result.success) {
     sendError(res, 409, 'Invalid state transition', result.error);
     return;
+  }
+
+  // Resume heartbeat if returning to a state that needs it
+  try {
+    await resumeHeartbeat(id);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    logger.error({ instanceId: id, error: errMsg }, 'Error resuming heartbeat');
   }
 
   sendJson(res, 200, result.instance);

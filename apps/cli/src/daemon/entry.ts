@@ -4,6 +4,10 @@ import { startServer, stopServer } from './server.js';
 import { removePid, writePid } from './lifecycle.js';
 import { connectWhatsApp, disconnectWhatsApp, onMessage } from '../whatsapp/connection.js';
 import { createMessageHandler } from '../whatsapp/handler.js';
+import { reconstructTimers, cancelAllHeartbeats, cancelHeartbeat } from '../engine/heartbeat.js';
+import { onTerminalState } from '../engine/state-machine.js';
+import { destroySession } from '../agent/session.js';
+import { onInstanceTerminal } from '../engine/queue.js';
 import logger from '../utils/logger.js';
 
 const AUTH_DIR = path.resolve('.relay-agent', 'whatsapp-auth');
@@ -21,10 +25,25 @@ const AUTH_DIR = path.resolve('.relay-agent', 'whatsapp-auth');
  */
 
 async function main(): Promise<void> {
+  // Register terminal state cleanup hook before starting server
+  onTerminalState(async (instanceId: string) => {
+    cancelHeartbeat(instanceId);
+    destroySession(instanceId);
+    await onInstanceTerminal(instanceId);
+  });
+
   try {
     await startServer();
     writePid(process.pid);
     logger.info({ pid: process.pid }, 'Daemon process started');
+
+    // Reconstruct heartbeat timers for active instances (daemon restart recovery)
+    try {
+      await reconstructTimers();
+    } catch (err) {
+      const timerError = err instanceof Error ? err.message : 'Unknown error';
+      logger.warn({ error: timerError }, 'Failed to reconstruct heartbeat timers on startup');
+    }
 
     // Register the message handler for incoming WhatsApp messages
     const messageHandler = createMessageHandler();
@@ -51,6 +70,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal, stopping daemon');
     try {
+      cancelAllHeartbeats();
       await disconnectWhatsApp();
       await stopServer();
       removePid();

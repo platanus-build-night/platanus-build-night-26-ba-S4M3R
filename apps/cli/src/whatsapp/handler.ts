@@ -2,6 +2,8 @@ import type { IncomingMessage } from './connection.js';
 import * as InstanceStore from '../store/instances.js';
 import * as TranscriptStore from '../store/transcripts.js';
 import { transition } from '../engine/state-machine.js';
+import { processWithAgent } from '../agent/session.js';
+import { cancelHeartbeat, scheduleHeartbeat } from '../engine/heartbeat.js';
 import type { StateEvent } from '../types.js';
 import logger from '../utils/logger.js';
 
@@ -13,6 +15,11 @@ export interface MessageHandlerDeps {
   instanceStore: typeof InstanceStore;
   transcriptStore: typeof TranscriptStore;
   stateMachine: { transition: typeof transition };
+  processWithAgent: typeof processWithAgent;
+  heartbeat: {
+    cancelHeartbeat: typeof cancelHeartbeat;
+    scheduleHeartbeat: typeof scheduleHeartbeat;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -23,6 +30,11 @@ const defaultDeps: MessageHandlerDeps = {
   instanceStore: InstanceStore,
   transcriptStore: TranscriptStore,
   stateMachine: { transition },
+  processWithAgent,
+  heartbeat: {
+    cancelHeartbeat,
+    scheduleHeartbeat,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -97,8 +109,26 @@ async function handleIncomingMessage(
         { instanceId: instance.id, phone },
         `Incoming message routed to instance ${instance.id}`,
       );
-      // Agent processing placeholder -- will be wired in Phase 3
-      void processAgentResponse(instance.id);
+
+      // Cancel existing heartbeat while agent processes
+      deps.heartbeat.cancelHeartbeat(instance.id);
+
+      // Let the agent process the incoming message
+      try {
+        await deps.processWithAgent(instance.id, text);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : 'Unknown error';
+        logger.error(
+          { instanceId: instance.id, error: errMsg },
+          'Agent failed to process incoming message',
+        );
+      }
+
+      // Schedule a new heartbeat (agent may have sent a response, now waiting for reply)
+      deps.heartbeat.scheduleHeartbeat(
+        instance.id,
+        instance.heartbeat_config.interval_ms,
+      );
     } else {
       logger.warn(
         { instanceId: instance.id, error: result.error },
@@ -115,21 +145,3 @@ async function handleIncomingMessage(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Agent response placeholder (Phase 3)
-// ---------------------------------------------------------------------------
-
-/**
- * Placeholder for agent processing that will be called when a contact replies.
- *
- * In Phase 3, this will invoke the pi-mono agent session to process the
- * incoming message and generate a response.
- *
- * @param instanceId - The conversation instance to process
- */
-export async function processAgentResponse(instanceId: string): Promise<void> {
-  logger.debug(
-    { instanceId },
-    'processAgentResponse placeholder called -- agent wiring pending (Phase 3)',
-  );
-}

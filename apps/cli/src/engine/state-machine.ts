@@ -9,6 +9,22 @@ import * as InstanceStore from '../store/instances.js';
 import logger from '../utils/logger.js';
 
 // ============================================
+// Terminal State Hooks
+// ============================================
+
+type TerminalHook = (instanceId: string) => void | Promise<void>;
+
+const terminalHooks: TerminalHook[] = [];
+
+/**
+ * Registers a callback to be invoked when any instance reaches a terminal state
+ * (COMPLETED, ABANDONED, FAILED). Used to wire cleanup and queue dequeue.
+ */
+export function onTerminalState(hook: TerminalHook): void {
+  terminalHooks.push(hook);
+}
+
+// ============================================
 // Terminal State Detection
 // ============================================
 
@@ -160,6 +176,21 @@ export async function transition(
     { transition: stateTransition },
     `State transition: ${currentState} -> ${nextState} (event: ${event}, instance: ${instanceId})`,
   );
+
+  // Fire terminal state hooks if the instance reached a terminal state
+  if (isTerminalState(nextState)) {
+    for (const hook of terminalHooks) {
+      try {
+        await hook(instanceId);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : 'Unknown error';
+        logger.error(
+          { instanceId, error: errMsg },
+          'Terminal state hook failed',
+        );
+      }
+    }
+  }
 
   return {
     success: true,

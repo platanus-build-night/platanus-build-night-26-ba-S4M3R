@@ -1,0 +1,65 @@
+---
+title: Quickstart
+description: Get started with relay in minutes.
+---
+
+# Quickstart
+
+Get relay running in your agent workflow.
+
+## Start an Interview
+
+Trigger a conversation with a specific user:
+
+```bash
+relay interview start \
+  --user-id=usr_8123 \
+  --objective="validate onboarding friction"
+```
+
+relay will:
+- Introduce the purpose of the conversation
+- Validate consent
+- Ask structured questions based on the objective
+- Follow up on areas of friction
+- Confirm a summary with the user
+- Close respectfully
+
+## Start a Group Interview
+
+Coordinate conversations across multiple users with shared context:
+
+```bash
+relay group-interview start \
+  --group-id=power_users \
+  --shared-context=product_feedback
+```
+
+## Pull Results
+
+Retrieve structured results from any conversation:
+
+```bash
+relay pull --conversation-id=cnv_4421
+```
+
+Returns:
+
+```json
+{
+  "summary": "...",
+  "structured_data": {},
+  "confidence": 0.82,
+  "raw_log_url": "..."
+}
+```
+
+## View Logs
+
+Every external interaction is traceable:
+
+```bash
+relay logs --conversation-id=cnv_4421
+```
+
+> **Preview**: This documents the intended CLI interface. relay is under active development.

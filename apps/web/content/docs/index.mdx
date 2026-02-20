@@ -1,0 +1,40 @@
+---
+title: Introduction
+description: What relay is and the problem it solves.
+---
+
+# Introduction
+
+relay is a restricted external agent that isolates execution power from communication power.
+
+## The Problem
+
+Your core agent has filesystem access, code execution, internal APIs, and secrets. When it needs to talk to real humans — via WhatsApp, voice calls, interviews, or outreach — you don't want that same powerful agent exposed externally.
+
+You want **communication without capability leakage**.
+
+## The Solution
+
+relay is a separate agent that can only talk. It handles structured conversations, interviews, and multi-channel outreach while your core agent retains full system access.
+
+**relay can:**
+- Have structured conversations
+- Run interviews (individual or group)
+- Call users via voice (ElevenLabs)
+- Message via WhatsApp
+- Maintain scoped conversation memory
+
+**relay cannot:**
+- Execute arbitrary code
+- Access your filesystem
+- Use developer tools
+- Call internal APIs directly
+- Escalate privileges
+
+## Product Principles
+
+1. **Capability Isolation** — Two agents: Core Agent (full access) + Relay Agent (conversation-only). No shared execution context.
+
+2. **API-First** — Everything is programmable. No UI dependency. No hidden flows.
+
+3. **Conversation as Execution Boundary** — relay collects information, follows an internal checklist, and produces structured output. The core agent decides what to do with that output.

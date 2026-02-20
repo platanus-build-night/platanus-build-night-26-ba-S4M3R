@@ -1,0 +1,59 @@
+---
+title: Security Model
+description: How relay isolates execution from communication.
+---
+
+# Security Model
+
+relay enforces strict capability isolation between your core agent and external communication.
+
+## Hard Constraints
+
+relay **cannot**:
+
+- Read your files
+- Execute code
+- Call internal APIs
+- Escalate roles
+- Modify infrastructure
+
+It **only**:
+
+- Talks
+- Collects
+- Summarizes
+- Reports
+
+## Structured Data Bridge
+
+Your core agent communicates with relay via a strict schema. No arbitrary instructions. No tool injection.
+
+```json
+{
+  "objective": "string",
+  "constraints": [],
+  "allowed_updates": ["shared_context"]
+}
+```
+
+The core agent defines the objective and constraints. relay operates within those bounds and returns structured output.
+
+## Channels
+
+### WhatsApp
+- Conversational interviews
+- Async follow-ups
+- User validation
+- Customer research
+
+### Voice (via ElevenLabs)
+- Outbound interviews
+- Qualification calls
+- Onboarding assistance
+- Research calls
+
+Voice is conversational only. No execution layer.
+
+## Design Principle
+
+> Your core agent stays powerful. relay stays contained. Separation by design.

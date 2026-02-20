@@ -1,0 +1,122 @@
+---
+title: CLI Reference
+description: Complete reference for all relay commands.
+---
+
+# CLI Reference
+
+All commands communicate with the relay daemon via HTTP on `localhost:3214`.
+
+## Daemon Lifecycle
+
+### `relay init`
+
+Initialize WhatsApp authentication. Displays a QR code for scanning.
+
+```bash
+relay init
+```
+
+### `relay start`
+
+Launch the persistent background daemon.
+
+```bash
+relay start
+```
+
+### `relay stop`
+
+Gracefully terminate the daemon. All state is flushed to disk.
+
+```bash
+relay stop
+```
+
+### `relay status`
+
+Check daemon health and connection state.
+
+```bash
+relay status
+relay status --json  # machine-parseable output
+```
+
+Returns: daemon PID, uptime, WhatsApp connection state, active instance count.
+
+## Conversation Management
+
+### `relay create`
+
+Create a new conversation instance.
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time" \
+  --todo="ask ETA,confirm address" \
+  --heartbeat=30m \
+  --max-followups=5
+```
+
+Returns a unique instance ID. If another instance for the same contact is already active, the new instance enters `QUEUED` state.
+
+### `relay list`
+
+List all instances with their current state.
+
+```bash
+relay list
+```
+
+### `relay get <id>`
+
+Get detailed state for a specific instance.
+
+```bash
+relay get cnv_7f3a
+```
+
+### `relay transcript <id>`
+
+Display the full message history with timestamps and sender info.
+
+```bash
+relay transcript cnv_7f3a
+```
+
+## Instance Control
+
+### `relay pause <id>`
+
+Suspend an active instance. Heartbeats are paused and incoming messages are not processed.
+
+```bash
+relay pause cnv_7f3a
+```
+
+### `relay resume <id>`
+
+Resume a paused instance. Returns to the state it was in before pausing. Also works for instances in `NEEDS_HUMAN_INTERVENTION` state.
+
+```bash
+relay resume cnv_7f3a
+```
+
+### `relay cancel <id>`
+
+Cancel an instance. Transitions to `FAILED` with reason "cancelled". No farewell message is sent.
+
+```bash
+relay cancel cnv_7f3a
+```
+
+### `relay send <id> <message>`
+
+Inject a message as the agent into an active conversation.
+
+```bash
+relay send cnv_7f3a "Sorry for the delay, checking now"
+```
+
+Also transitions `NEEDS_HUMAN_INTERVENTION` instances back to `ACTIVE`.

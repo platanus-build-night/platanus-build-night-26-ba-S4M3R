@@ -3,71 +3,96 @@
 ## Brand Core
 
 **Name:** relay (always lowercase)
-**One liner:** A separate agent for talking with the real world.
-**Positioning:** An external-facing conversational agent that isolates execution power from communication power.
+**One liner:** A privilege-isolated conversational agent for WhatsApp.
+**Positioning:** A local CLI agent that mediates all communication between a high-privilege internal agent and real humans via WhatsApp, enforcing strict capability isolation.
 
 ## The Problem
 
-Powerful agents have filesystem access, code execution, internal APIs, and secrets. When they need to talk to real humans (WhatsApp, voice, interviews, outreach), you don't want that same agent exposed externally. You want: communication without capability leakage.
+Powerful agents have filesystem access, code execution, internal APIs, and secrets. When they need to talk to real humans via WhatsApp — to confirm deliveries, collect feedback, or validate information — you don't want that same agent exposed externally. You want: communication without capability leakage.
 
 ## The Solution
 
-relay is a restricted external agent.
+relay is a client-daemon pair. A persistent background daemon manages the WhatsApp connection (via Baileys v7) and conversation state. Lightweight CLI commands provide full observability and control. Your main agent orchestrates human conversations through shell commands while maintaining strict privilege isolation.
 
-**Can:** structured conversations, interviews, calls (ElevenLabs), WhatsApp messaging, scoped conversation memory, controlled shared context updates.
+**Can:** WhatsApp messaging, structured conversations with objectives and todo lists, automatic heartbeat follow-ups, conversation state machine, persistent state across restarts.
 
 **Cannot:** execute code, access filesystem, use dev tools, call internal APIs, escalate privileges.
 
-Triggered only via CLI, API, or another agent. Your powerful agent delegates — never talks directly to the outside world.
+Triggered only via CLI commands (`relay create`, `relay send`, etc.). Your powerful agent delegates — never talks directly to the outside world.
 
 ## Product Principles
 
-1. **Capability Isolation** — Core Agent (full access) + Relay Agent (conversation-only). No shared execution context.
-2. **API-First** — Everything programmable. No UI dependency. No hidden flows.
-3. **Conversation as Execution Boundary** — relay collects, follows checklists, produces structured output, pushes logs. The core agent decides what to do with output.
+1. **Capability Isolation** — Main Agent (full access) + Relay Agent (conversation-only). No shared execution context.
+2. **API-First** — Everything programmable via CLI. No UI dependency. No hidden flows.
+3. **Conversation as Execution Boundary** — relay collects, follows checklists, produces structured output. The main agent decides what to do with output.
 
 ## Features
 
-- **Interviews**: `relay interview start --user-id=usr_8123 --objective="validate onboarding friction"`
-- **Group Interviews**: `relay group-interview start --group-id=power_users --shared-context=product_feedback`
-- **Internal Conversation To-Do**: Invisible checklist guiding agent during conversation
-- **Pull Command**: `relay pull --conversation-id=cnv_4421` — returns structured JSON
-- **Logging**: `relay logs --conversation-id=cnv_4421` — full auditability
+- **Daemon Management**: `relay start` / `relay stop` — persistent background process
+- **Conversation Instances**: `relay create --contact="+56912345678" --objective="confirm delivery" --heartbeat=30m`
+- **State Machine**: CREATED → ACTIVE → WAITING_FOR_REPLY → COMPLETED (11 defined states)
+- **Heartbeat System**: Automatic follow-ups for unresponsive contacts with configurable intervals
+- **Full Observability**: `relay list`, `relay get <id>`, `relay transcript <id>`, `relay status`
+- **Instance Control**: `relay pause`, `relay resume`, `relay cancel`, `relay send`
+- **Concurrency Control**: One active instance per contact, additional instances queued (FIFO)
 
 ## Channels
 
-- **WhatsApp**: interviews, async follow-ups, user validation, customer research
-- **Voice (ElevenLabs)**: outbound interviews, qualification calls, onboarding, research
+- **WhatsApp (via Baileys v7)**: structured conversations, heartbeat follow-ups, objective-driven interactions
 
 ## Security Model
 
-Hard constraints: no file access, no code execution, no internal APIs, no role escalation, no infrastructure modification. Only talks, collects, summarizes, reports.
+Hard constraints: no file access, no code execution, no internal APIs, no role escalation, no infrastructure modification.
 
-Structured data bridge between core agent and relay via strict schema:
-```json
-{
-  "objective": "string",
-  "constraints": [],
-  "allowed_updates": ["shared_context"]
-}
-```
+Conversation-scoped tools only:
+- `send_message(text)` — deliver via WhatsApp
+- `mark_todo_item(todo_id, status)` — track progress
+- `end_conversation(reason)` — close the instance
+- `schedule_next_heartbeat(delay)` — set follow-up timer
 
 ## Visual Identity
 
+### Overall Vibe: Dark Editorial Tech
+
+relay looks like a technical tool with editorial craft — dark, glass-based, but with warmth and texture layered in. Not sterile Silicon Valley cold. Not Web3 neon chaos. A dark interface that feels human, tactile, and deliberately made.
+
+**Combines:** dark glass panels + fine grain texture + halftone/dot-matrix graphic elements + monochrome UI with one warm accent color.
+
 ### Style
-- Dark-first
-- Glass panels (backdrop-blur, semi-transparent backgrounds)
+- Dark-first with warmth — near-black base with subtle warm undertones
+- Glass panels (backdrop-blur, semi-transparent backgrounds) as primary surface treatment
+- Fine grain / noise texture overlay on backgrounds — adds tactile, editorial depth
+- Halftone / dot-matrix graphic elements (density gradients, controlled imperfection)
+- Warm diffused glows layered behind glass — not flat, not sterile
 - Terminal typography — monospace everywhere
 - Minimal animations
-- Subtle gradients
+- No glossy UI, no heavy drop shadows, no sharp saturated gradients
+
+### Background Treatment
+- Near-black base with subtle noise/grain texture across the canvas
+- Warm, diffused glow behind key elements — muted amber/orange radial effects through dark glass
+- Slight radial glow feels like: distant warmth, analog signal, airbrushed pigment on dark paper
+- Grain avoids flat dark gradients — adds depth without traditional shadows
+- Everything blends gently behind glass — calm confidence, craft over enterprise rigidity
+
+### Graphic Elements
+- Halftone / dot-matrix constructions for hero shapes and decorative elements
+- Tiny uniform dots with density gradients (dense center → sparse edges)
+- Inspired by: print halftone patterns, retro digital rendering, raster graphics
+- Circles and geometric forms that feel computational but artistic — organic dissolve at edges
+- Rendered in light/accent tones against dark backgrounds
+- Symbolically: focus, central gravity, a core engine radiating outward
 
 ### Color Palette
-- Background: near-black (#0a0a0a, #111)
+- Background: near-black (#0a0a0a, #111) with subtle warm grain overlay
 - Glass surfaces: rgba(255,255,255,0.05) to rgba(255,255,255,0.1) with backdrop-blur
-- Primary text: white/light gray
-- Accent: subtle cool tones (muted blue/cyan for interactive elements)
+- Primary text: white / light gray
+- Secondary text: muted warm gray (#9A9590)
+- Accent: warm muted amber (#C4713B) — used sparingly for interactive elements, links, highlights, halftone dots
+- Accent glow: diffused warm amber (rgba(196, 113, 59, 0.10)) for radial background effects behind glass
 - Borders: rgba(255,255,255,0.1)
-- No bright saturated colors
+- Halftone dots: white/light gray or accent amber, depending on context
+- No bright saturated colors, no neon, no cold corporate blue
 
 ### Typography
 - Monospace font stack: `"JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", monospace`
@@ -75,11 +100,13 @@ Structured data bridge between core agent and relay via strict schema:
 - Terminal-like rendering
 
 ### Component Patterns
-- Glass cards: semi-transparent bg + backdrop-blur + subtle border
+- Glass cards: semi-transparent bg + backdrop-blur + subtle border + fine grain texture
 - Terminal inputs: `$` prefix, monospace, dark background
 - Code blocks as primary content display
-- Minimal, flat buttons
+- Minimal, flat buttons — no glossy effects
 - No rounded-full pills — prefer sharp or slightly rounded corners
+- Air and space over density — generous padding and margins
+- Soft contrast over hard dividers
 
 ## Tone & Messaging
 
@@ -105,13 +132,14 @@ Structured data bridge between core agent and relay via strict schema:
 
 ## Landing Page Pattern
 
-Hero starts with a terminal prompt:
+Hero starts with a terminal prompt showing a `relay create` command:
 ```
-> create an external agent
-> that can talk to users
-> without touching my system
+> relay create \
+>   --contact="+56912345678" \
+>   --objective="confirm delivery time" \
+>   --heartbeat=30m
 ```
 
-Interactive input: `$ describe your use case...`
+Interactive input: `$ describe your objective...`
 
-Response renders as structured CLI output showing what relay will do.
+Response renders as structured CLI output showing a created conversation instance with state, heartbeat config, and isolation confirmation.

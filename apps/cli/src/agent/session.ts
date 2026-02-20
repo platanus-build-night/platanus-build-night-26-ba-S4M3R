@@ -151,12 +151,18 @@ export async function createSession(
     contactJid,
   });
 
-  // Configure auth with runtime API key
-  const authStorage = AuthStorage.create('/tmp/relay-agent/auth.json');
+  // Configure auth: pi-mono reads API keys from environment variables.
+  // Set them before creating the session so the SDK picks them up.
   const resolvedProvider = config.model_provider ?? 'anthropic';
   if (config.model_api_key) {
-    authStorage.setRuntimeApiKey(resolvedProvider, config.model_api_key);
+    if (resolvedProvider === 'anthropic') {
+      process.env.ANTHROPIC_API_KEY = config.model_api_key;
+    } else if (resolvedProvider === 'openai') {
+      process.env.OPENAI_API_KEY = config.model_api_key;
+    }
   }
+
+  const authStorage = AuthStorage.create('/tmp/relay-agent/auth.json');
 
   const modelRegistry = new ModelRegistry(authStorage);
   const model = resolveModel(config.model_provider, config.model_api_key);

@@ -5,55 +5,55 @@ description: How relay isolates execution from communication.
 
 # Security Model
 
-relay enforces strict capability isolation between your core agent and external communication.
+relay enforces strict capability isolation between your main agent and external communication.
 
 ## Hard Constraints
 
-relay **cannot**:
+The conversation agent within each instance has **no access** to:
 
-- Read your files
-- Execute code
-- Call internal APIs
-- Escalate roles
-- Modify infrastructure
+- Filesystem (read or write)
+- Code execution
+- Internal APIs
+- Web browsing or network access beyond WhatsApp
+- Role escalation or privilege modification
+- Infrastructure modification
 
 It **only**:
 
-- Talks
-- Collects
-- Summarizes
-- Reports
+- Sends messages via WhatsApp
+- Tracks todo item completion
+- Manages conversation lifecycle
+- Schedules heartbeat follow-ups
 
-## Structured Data Bridge
+## Conversation-Scoped Tools
 
-Your core agent communicates with relay via a strict schema. No arbitrary instructions. No tool injection.
+Each conversation instance runs an isolated agent session with exactly four tools:
 
-```json
-{
-  "objective": "string",
-  "constraints": [],
-  "allowed_updates": ["shared_context"]
-}
-```
+| Tool | Purpose |
+|------|---------|
+| `send_message(text)` | Deliver a message via WhatsApp |
+| `mark_todo_item(todo_id, status)` | Track checklist progress |
+| `end_conversation(reason)` | Close the conversation |
+| `schedule_next_heartbeat(delay)` | Set the next follow-up timer |
 
-The core agent defines the objective and constraints. relay operates within those bounds and returns structured output.
+No tool injection. No arbitrary instructions. No escape from this scope.
 
-## Channels
+## Network Boundary
 
-### WhatsApp
-- Conversational interviews
-- Async follow-ups
-- User validation
-- Customer research
+relay exposes exactly two network listeners:
 
-### Voice (via ElevenLabs)
-- Outbound interviews
-- Qualification calls
-- Onboarding assistance
-- Research calls
+1. **WhatsApp WebSocket** — Baileys v7 connection to WhatsApp servers
+2. **HTTP IPC on localhost:3214** — Bound to loopback interface only. CLI commands communicate with the daemon via this local server.
 
-Voice is conversational only. No execution layer.
+No external HTTP listeners. No webhooks (v1). No cloud connectivity.
+
+## Data Isolation
+
+- All external input (WhatsApp messages from contacts) is isolated within the conversation instance
+- Contact messages are never exposed to the main agent's execution context
+- WhatsApp auth credentials are stored locally in `.relay-agent/` with filesystem-level permissions
+- All state persists as JSON files via lowdb
 
 ## Design Principle
 
-> Your core agent stays powerful. relay stays contained. Separation by design.
+> Your main agent stays powerful. relay stays contained. Separation by design.

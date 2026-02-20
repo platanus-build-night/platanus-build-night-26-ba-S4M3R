@@ -9,8 +9,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "relay-agent",
-  description: "A separate agent for talking with the real world.",
+  title: "relay",
+  description: "A privilege-isolated conversational agent for WhatsApp. Communication without capability leakage.",
 };
 
 export default function RootLayout({

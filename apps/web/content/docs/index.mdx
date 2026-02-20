@@ -5,36 +5,51 @@ description: What relay is and the problem it solves.
 
 # Introduction
 
-relay is a restricted external agent that isolates execution power from communication power.
+relay is a local CLI agent that acts as a privilege-isolated conversational execution layer, mediating all communication between a high-privilege internal agent and real humans via WhatsApp.
 
 ## The Problem
 
-Your core agent has filesystem access, code execution, internal APIs, and secrets. When it needs to talk to real humans — via WhatsApp, voice calls, interviews, or outreach — you don't want that same powerful agent exposed externally.
+Your core agent has filesystem access, code execution, internal APIs, and secrets. When it needs to talk to real humans — to confirm a delivery, validate information, or collect feedback — you don't want that same powerful agent exposed to external messaging channels.
 
 You want **communication without capability leakage**.
 
 ## The Solution
 
-relay is a separate agent that can only talk. It handles structured conversations, interviews, and multi-channel outreach while your core agent retains full system access.
+relay is a client-daemon pair: a persistent background daemon manages the WhatsApp connection and conversation state, while lightweight CLI commands provide full observability and control. Your main agent orchestrates human conversations programmatically through simple shell commands, while maintaining strict privilege isolation.
 
 **relay can:**
-- Have structured conversations
-- Run interviews (individual or group)
-- Call users via voice (ElevenLabs)
-- Message via WhatsApp
-- Maintain scoped conversation memory
+- Send and receive WhatsApp messages
+- Run structured conversations with objectives and todo lists
+- Automatically follow up with unresponsive contacts (heartbeat system)
+- Track conversation state through a defined state machine
+- Persist all state across daemon restarts
 
 **relay cannot:**
 - Execute arbitrary code
 - Access your filesystem
 - Use developer tools
-- Call internal APIs directly
+- Call internal APIs
 - Escalate privileges
+
+## Architecture
+
+```
+Main Agent (full privileges)
+    │
+    │ CLI commands (relay create, relay send, ...)
+    ▼
+relay daemon (localhost:3214)
+    │ conversation-scoped tools only
+    │
+    │ WhatsApp (Baileys v7)
+    ▼
+Human contacts
+```
 
 ## Product Principles
 
-1. **Capability Isolation** — Two agents: Core Agent (full access) + Relay Agent (conversation-only). No shared execution context.
+1. **Capability Isolation** — Main Agent (full access) + Relay Agent (conversation-only). No shared execution context.
 
-2. **API-First** — Everything is programmable. No UI dependency. No hidden flows.
+2. **API-First** — Everything is programmable via CLI. No UI dependency. No hidden flows.
 
-3. **Conversation as Execution Boundary** — relay collects information, follows an internal checklist, and produces structured output. The core agent decides what to do with that output.
+3. **Conversation as Execution Boundary** — relay collects information, follows an internal checklist, and produces structured output. The main agent decides what to do with that output.

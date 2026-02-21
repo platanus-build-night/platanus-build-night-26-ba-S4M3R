@@ -1,0 +1,85 @@
+---
+title: State Machine
+description: Conversation instance lifecycle and state transitions.
+---
+
+# State Machine
+
+Each conversation instance follows a defined set of state transitions. States ensure predictable behavior and full observability.
+
+## States
+
+| State | Description |
+|-------|-------------|
+| `CREATED` | Instance created, agent has not yet sent first message |
+| `ACTIVE` | Agent is actively processing the conversation |
+| `WAITING_FOR_REPLY` | Message sent to contact, awaiting their response |
+| `WAITING_FOR_AGENT` | Contact replied, awaiting agent processing |
+| `HEARTBEAT_SCHEDULED` | Follow-up timer is pending |
+| `PAUSED` | Instance suspended by operator command |
+| `QUEUED` | Waiting for another instance on the same contact to complete |
+| `NEEDS_HUMAN_INTERVENTION` | Agent has flagged for human review |
+| `COMPLETED` | Conversation finished successfully |
+| `ABANDONED` | Contact did not respond after max follow-ups |
+| `FAILED` | Unrecoverable error or manual cancellation |
+
+## Transitions
+
+### Normal Flow
+
+```
+CREATED → ACTIVE → WAITING_FOR_REPLY → WAITING_FOR_AGENT → ACTIVE → ...
+```
+
+The conversation cycles between `ACTIVE`, `WAITING_FOR_REPLY`, and `WAITING_FOR_AGENT` until the agent calls `end_conversation()`.
+
+### Heartbeat Flow
+
+```
+WAITING_FOR_REPLY → HEARTBEAT_SCHEDULED → WAITING_FOR_REPLY
+```
+
+When a contact does not respond within the configured interval, the heartbeat fires. If max follow-ups are exceeded:
+
+```
+HEARTBEAT_SCHEDULED → ABANDONED
+```
+
+### Queuing
+
+Only one active instance per contact. Additional instances enter `QUEUED`:
+
+```
+QUEUED → CREATED  (when prior instance reaches terminal state)
+```
+
+### Pause / Resume
+
+Any non-terminal state can be paused. The previous state is recorded for resumption:
+
+```
+ACTIVE → PAUSED → ACTIVE
+WAITING_FOR_REPLY → PAUSED → WAITING_FOR_REPLY
+```
+
+### Human Intervention
+
+```
+ACTIVE → NEEDS_HUMAN_INTERVENTION → ACTIVE  (via relay resume or relay send)
+```
+
+### Cancellation
+
+Any non-terminal state can be cancelled:
+
+```
+(any non-terminal) → FAILED  (reason: "cancelled")
+```
+
+## Terminal States
+
+These states are final. No further transitions are possible:
+
+- `COMPLETED` — conversation ended successfully
+- `ABANDONED` — contact unresponsive after max follow-ups
+- `FAILED` — error or manual cancellation

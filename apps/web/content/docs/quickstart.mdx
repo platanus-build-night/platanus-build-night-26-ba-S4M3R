@@ -1,0 +1,91 @@
+---
+title: Quickstart
+description: Get relay running in under 10 minutes.
+---
+
+# Quickstart
+
+Get relay running and create your first WhatsApp conversation.
+
+## 1. Initialize
+
+Set up WhatsApp authentication by scanning the QR code:
+
+```bash
+relay init
+```
+
+This displays a QR code in your terminal. Scan it with WhatsApp to authenticate. Auth state persists in `.relay-agent/` and reconnects automatically on restart.
+
+## 2. Start the Daemon
+
+Launch the persistent background process:
+
+```bash
+relay start
+```
+
+The daemon runs on `localhost:3214` and maintains the WhatsApp connection. All CLI commands communicate with the daemon via HTTP.
+
+## 3. Create a Conversation
+
+Create a new conversation instance with an objective and optional todo list:
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time for order #4421" \
+  --todo="ask preferred time,confirm address,get signature name" \
+  --heartbeat=30m \
+  --max-followups=5
+```
+
+Returns a unique instance ID (e.g., `cnv_7f3a`). The agent sends an initial message via WhatsApp and the conversation begins.
+
+## 4. Monitor Progress
+
+Check the state of your conversation:
+
+```bash
+relay get cnv_7f3a
+```
+
+List all active instances:
+
+```bash
+relay list
+```
+
+Read the full transcript:
+
+```bash
+relay transcript cnv_7f3a
+```
+
+## 5. Control the Conversation
+
+Pause, resume, or cancel at any time:
+
+```bash
+relay pause cnv_7f3a
+relay resume cnv_7f3a
+relay cancel cnv_7f3a
+```
+
+Inject a message manually when needed:
+
+```bash
+relay send cnv_7f3a "Sorry for the delay, checking now"
+```
+
+## 6. Stop the Daemon
+
+When you're done:
+
+```bash
+relay stop
+```
+
+All state is flushed to disk and persists for the next session.
+
+> **Note**: relay is under active development. This documents the intended CLI interface.

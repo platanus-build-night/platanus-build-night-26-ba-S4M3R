@@ -1,0 +1,54 @@
+---
+title: Heartbeat System
+description: Automatic follow-ups for unresponsive contacts.
+---
+
+# Heartbeat System
+
+The heartbeat system automatically re-engages contacts who have not responded within a configurable time interval.
+
+## How It Works
+
+When a conversation enters `WAITING_FOR_REPLY` and the contact does not respond within the configured heartbeat interval, the system:
+
+1. Transitions the instance to `HEARTBEAT_SCHEDULED`
+2. The agent composes and sends a follow-up message
+3. The instance transitions back to `WAITING_FOR_REPLY`
+4. The cycle repeats until the contact responds or max follow-ups are reached
+
+## Configuration
+
+Set heartbeat parameters when creating a conversation:
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery" \
+  --heartbeat=30m \
+  --max-followups=5
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--heartbeat` | 30m | Time to wait before sending a follow-up |
+| `--max-followups` | 5 | Maximum number of follow-up attempts |
+
+## Behavior
+
+- **Timer accuracy**: within 30 seconds of the scheduled time
+- **Follow-up content**: the agent decides the follow-up message based on conversation context and objective
+- **Abandonment**: when max follow-ups are reached and the contact still has not responded, the instance transitions to `ABANDONED`
+- **Pausing**: when an instance is paused, heartbeat timers are suspended. They resume when the instance is resumed.
+
+## Monitoring
+
+Check heartbeat state for an instance:
+
+```bash
+relay get cnv_7f3a
+```
+
+Output includes:
+- Current follow-up count (e.g., `2/5`)
+- Time until next heartbeat
+- Whether heartbeats are active or suspended

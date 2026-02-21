@@ -4,7 +4,10 @@ import { startServer, stopServer } from './server.js';
 import { removePid, writePid } from './lifecycle.js';
 import { connectWhatsApp, disconnectWhatsApp, onMessage } from '../whatsapp/connection.js';
 import { createMessageHandler } from '../whatsapp/handler.js';
+import { connectTelegram, disconnectTelegram, onMessage as onTelegramMessage, hasAuthState as hasTelegramAuth } from '../telegram/connection.js';
+import { createTelegramMessageHandler } from '../telegram/handler.js';
 import { reconstructTimers, cancelAllHeartbeats, cancelHeartbeat } from '../engine/heartbeat.js';
+import { reconstructPollers, stopAllPolling } from '../elevenlabs/poller.js';
 import { onTerminalState } from '../engine/state-machine.js';
 import { createSession, destroySession, destroyAllSessions } from '../agent/session.js';
 import { onInstanceTerminal } from '../engine/queue.js';
@@ -49,9 +52,12 @@ async function main(): Promise<void> {
     // Reconstruct state from persisted JSON files (daemon restart recovery)
     await reconstructState();
 
-    // Register the message handler for incoming WhatsApp messages
+    // Register the message handlers for incoming messages
     const messageHandler = createMessageHandler();
     onMessage(messageHandler);
+
+    const telegramHandler = createTelegramMessageHandler();
+    onTelegramMessage(telegramHandler);
 
     // Auto-connect WhatsApp if auth state exists from a previous session
     if (fs.existsSync(AUTH_DIR)) {
@@ -64,6 +70,19 @@ async function main(): Promise<void> {
       }
     } else {
       logger.info('No WhatsApp auth state found. Run `relay init` to connect.');
+    }
+
+    // Auto-connect Telegram if bot token exists
+    if (hasTelegramAuth()) {
+      logger.info('Telegram bot token found, auto-connecting');
+      try {
+        await connectTelegram();
+      } catch (err) {
+        const tgError = err instanceof Error ? err.message : 'Unknown error';
+        logger.warn({ error: tgError }, 'Telegram auto-connect failed on startup');
+      }
+    } else {
+      logger.info('No Telegram bot token found. Run `relay-agent telegram login` to connect.');
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -85,14 +104,16 @@ async function main(): Promise<void> {
 
     logger.info({ signal }, 'Shutting down gracefully...');
     try {
-      // 1. Cancel all heartbeat timers
+      // 1. Cancel all heartbeat timers and ElevenLabs pollers
       cancelAllHeartbeats();
+      stopAllPolling();
 
       // 2. Destroy all agent sessions
       destroyAllSessions();
 
-      // 3. Disconnect WhatsApp
+      // 3. Disconnect WhatsApp and Telegram
       await disconnectWhatsApp();
+      await disconnectTelegram();
 
       // 4. Flush all lowdb stores to disk
       try {
@@ -145,8 +166,17 @@ async function reconstructState(): Promise<void> {
 
     let restoredCount = 0;
 
+    // Reconstruct ElevenLabs pollers for active phone instances
+    await reconstructPollers();
+
     for (const instance of nonTerminal) {
       try {
+        // Phone channel instances only need polling (handled above)
+        if (instance.channel === 'phone') {
+          restoredCount++;
+          continue;
+        }
+
         switch (instance.state) {
           case 'WAITING_FOR_REPLY':
           case 'HEARTBEAT_SCHEDULED':

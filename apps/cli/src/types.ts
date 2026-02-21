@@ -38,6 +38,16 @@ export interface HeartbeatConfig {
   max_followups: number;
 }
 
+/** Channel through which the conversation is conducted. */
+export type ConversationChannel = 'whatsapp' | 'phone' | 'telegram';
+
+/** ElevenLabs-specific data stored on phone channel instances. */
+export interface ElevenLabsData {
+  agent_id: string;
+  conversation_id: string;
+  call_sid?: string;
+}
+
 export interface ConversationInstance {
   /** UUID v4 */
   id: string;
@@ -52,6 +62,12 @@ export interface ConversationInstance {
   follow_up_count: number;
   /** Set when state is FAILED */
   failure_reason: string | null;
+  /** Channel: "whatsapp" (default) or "phone" (ElevenLabs) */
+  channel: ConversationChannel;
+  /** Present only when channel is "phone" */
+  elevenlabs_data?: ElevenLabsData;
+  /** Telegram chat ID for this contact (set when contact messages the bot) */
+  telegram_chat_id?: string;
   /** ISO 8601 */
   created_at: string;
   /** ISO 8601 */
@@ -82,6 +98,8 @@ export interface RelayConfig {
   /** e.g., "anthropic", "openai" */
   model_provider: string | null;
   whatsapp_connected: boolean;
+  telegram_connected: boolean;
+  telegram_bot_token: string | null;
   /** Default: 3214 */
   daemon_port: number;
 }
@@ -95,6 +113,16 @@ export interface CreateInstanceRequest {
   target_contact: string;
   todos: Array<{ text: string }>;
   heartbeat_config?: Partial<HeartbeatConfig>;
+  /** Channel: "whatsapp" (default) or "phone" (ElevenLabs call) */
+  channel?: ConversationChannel;
+  /** Required when channel is "phone" */
+  phone_config?: {
+    elevenlabs_api_key: string;
+    phone_number_id: string;
+    first_message: string;
+    voice_id?: string;
+    language?: string;
+  };
 }
 
 export interface CreateInstanceResponse {
@@ -110,6 +138,7 @@ export interface DaemonStatusResponse {
   pid: number;
   uptime_seconds: number;
   whatsapp_connected: boolean;
+  telegram_connected: boolean;
   active_instance_count: number;
   total_instance_count: number;
 }

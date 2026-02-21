@@ -4,6 +4,14 @@ import { getInstancesDb } from './index.js';
 
 const TERMINAL_STATES: ReadonlySet<string> = new Set<TerminalState>(['COMPLETED', 'ABANDONED', 'FAILED']);
 
+/** Backfill channel for instances created before the field existed. */
+function ensureChannel(inst: ConversationInstance): ConversationInstance {
+  if (!inst.channel) {
+    inst.channel = 'whatsapp';
+  }
+  return inst;
+}
+
 /**
  * Creates a new conversation instance with generated UUID and timestamps.
  */
@@ -32,7 +40,8 @@ export async function create(
 export async function getById(id: string): Promise<ConversationInstance | null> {
   const db = getInstancesDb();
   await db.read();
-  return db.data.instances.find((inst) => inst.id === id) ?? null;
+  const inst = db.data.instances.find((inst) => inst.id === id);
+  return inst ? ensureChannel(inst) : null;
 }
 
 /**
@@ -41,7 +50,7 @@ export async function getById(id: string): Promise<ConversationInstance | null> 
 export async function getAll(): Promise<ConversationInstance[]> {
   const db = getInstancesDb();
   await db.read();
-  return db.data.instances;
+  return db.data.instances.map(ensureChannel);
 }
 
 /**

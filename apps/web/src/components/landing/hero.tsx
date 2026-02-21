@@ -19,8 +19,8 @@ export function Hero() {
           the agent your agent sends to talk to people.
         </p>
         <p className="mt-3 text-sm text-muted/50">
-          your Open Claw builds. relay handles the human side — WhatsApp
-          conversations, follow-ups, the whole thing.
+          your Open Claw builds. relay handles the human side — WhatsApp,
+          Telegram, phone calls, follow-ups, the whole thing.
         </p>
 
         {/* Scroll hint */}

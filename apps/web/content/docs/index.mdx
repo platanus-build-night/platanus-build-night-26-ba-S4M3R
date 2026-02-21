@@ -5,7 +5,7 @@ description: What relay is and the problem it solves.
 
 # Introduction
 
-relay is a local CLI agent that acts as a privilege-isolated conversational execution layer, mediating all communication between a high-privilege internal agent and real humans via WhatsApp.
+relay is a local CLI agent that acts as a privilege-isolated conversational execution layer, mediating all communication between a high-privilege internal agent and real humans via WhatsApp, Telegram, and phone calls.
 
 ## The Problem
 
@@ -15,10 +15,12 @@ You want **communication without capability leakage**.
 
 ## The Solution
 
-relay is a client-daemon pair: a persistent background daemon manages the WhatsApp connection and conversation state, while lightweight CLI commands provide full observability and control. Your main agent orchestrates human conversations programmatically through simple shell commands, while maintaining strict privilege isolation.
+relay is a client-daemon pair: a persistent background daemon manages WhatsApp, Telegram, and phone connections along with conversation state, while lightweight CLI commands provide full observability and control. Your main agent orchestrates human conversations programmatically through simple shell commands, while maintaining strict privilege isolation.
 
 **relay can:**
 - Send and receive WhatsApp messages
+- Send and receive Telegram messages via a bot
+- Place outbound phone calls via ElevenLabs Conversational AI
 - Run structured conversations with objectives and todo lists
 - Automatically follow up with unresponsive contacts (heartbeat system)
 - Track conversation state through a defined state machine
@@ -36,12 +38,14 @@ relay is a client-daemon pair: a persistent background daemon manages the WhatsA
 ```
 Main Agent (full privileges)
     │
-    │ CLI commands (relay create, relay send, ...)
+    │ CLI commands (relay create, relay send, relay call, ...)
     ▼
 relay daemon (localhost:3214)
     │ conversation-scoped tools only
     │
-    │ WhatsApp (Baileys v7)
+    ├── WhatsApp (Baileys v7)
+    ├── Telegram (grammY bot)
+    ├── Phone (ElevenLabs + Twilio)
     ▼
 Human contacts
 ```

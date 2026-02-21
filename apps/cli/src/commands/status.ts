@@ -27,6 +27,7 @@ export function registerStatusCommand(program: Command): void {
         console.log(`  PID:                  ${data.pid}`);
         console.log(`  Uptime:               ${formatUptime(data.uptime_seconds)}`);
         console.log(`  WhatsApp Connected:   ${data.whatsapp_connected ? 'Yes' : 'No'}`);
+        console.log(`  Telegram Connected:   ${data.telegram_connected ? 'Yes' : 'No'}`);
         console.log(`  Active Instances:     ${data.active_instance_count}`);
         console.log(`  Total Instances:      ${data.total_instance_count}`);
       } catch (err) {

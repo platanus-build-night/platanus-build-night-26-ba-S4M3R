@@ -29,6 +29,8 @@ const DEFAULT_CONFIG: ConfigData = {
     model_api_key: null,
     model_provider: null,
     whatsapp_connected: false,
+    telegram_connected: false,
+    telegram_bot_token: null,
     daemon_port: 3214,
   },
 };

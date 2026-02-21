@@ -102,6 +102,10 @@ export interface RelayConfig {
   telegram_bot_token: string | null;
   /** Default: 3214 */
   daemon_port: number;
+  /** Path to IDENTITY.md file */
+  identity_file: string;
+  /** Path to SOUL.md file */
+  soul_file: string;
 }
 
 // ============================================

@@ -16,6 +16,7 @@ import { registerSendCommand } from './commands/send.js';
 import { registerLoginCommand } from './commands/login.js';
 import { registerCallCommand } from './commands/call.js';
 import { registerTelegramLoginCommand } from './commands/telegram-login.js';
+import { registerConfigCommand } from './commands/config.js';
 
 const program = new Command();
 
@@ -39,5 +40,6 @@ registerSendCommand(program);
 registerLoginCommand(program);
 registerCallCommand(program);
 registerTelegramLoginCommand(program);
+registerConfigCommand(program);
 
 program.parse();

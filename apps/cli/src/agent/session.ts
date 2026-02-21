@@ -1,9 +1,10 @@
+import fs from 'node:fs';
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolResultBlockParam } from '@anthropic-ai/sdk/resources/messages';
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { AuthStorage } from '@mariozechner/pi-coding-agent';
-import type { ConversationInstance, StateEvent, TranscriptMessage } from '../types.js';
+import type { ConversationInstance, RelayConfig, StateEvent, TranscriptMessage } from '../types.js';
 import * as WhatsApp from '../whatsapp/connection.js';
 import * as Telegram from '../telegram/connection.js';
 import * as InstanceStore from '../store/instances.js';
@@ -20,7 +21,7 @@ import logger from '../utils/logger.js';
 export interface SessionDependencies {
   getInstanceById: (id: string) => Promise<ConversationInstance | null>;
   getTranscriptByInstance: (instanceId: string) => Promise<TranscriptMessage[]>;
-  getConfig: () => Promise<{ model_api_key: string | null; model_provider: string | null }>;
+  getConfig: () => Promise<RelayConfig>;
   transition: (instanceId: string, event: StateEvent) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -303,14 +304,36 @@ async function executeTool(
 // System Prompt Builder
 // ============================================
 
-export function buildSystemPrompt(instance: ConversationInstance): string {
+function loadFileContent(filePath: string): string | null {
+  try {
+    return fs.readFileSync(filePath, 'utf-8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function buildSystemPrompt(
+  instance: ConversationInstance,
+  identityContent?: string | null,
+  soulContent?: string | null,
+): string {
+  const parts: string[] = [];
+
+  if (identityContent) {
+    parts.push(identityContent);
+  }
+
+  if (soulContent) {
+    parts.push(soulContent);
+  }
+
   const todosFormatted = instance.todos
     .map((todo) => `- [${todo.status}] ${todo.text} (id: ${todo.id})`)
     .join('\n');
 
   const channelName = instance.channel === 'telegram' ? 'Telegram' : 'WhatsApp';
 
-  return `You are a conversation agent executing a specific objective via ${channelName}.
+  parts.push(`You are a conversation agent executing a specific objective via ${channelName}.
 
 OBJECTIVE: ${instance.objective}
 
@@ -326,7 +349,9 @@ RULES:
 - Use end_conversation when all todos are complete or the objective is fulfilled
 - If you cannot proceed, use request_human_intervention
 - If a phone call would be more effective (e.g., contact is unresponsive, complex discussion needed, or urgency requires it), use escalate_to_call to call the contact directly with full conversation context
-- Always call send_message to communicate — do NOT just produce text output`;
+- Always call send_message to communicate — do NOT just produce text output`);
+
+  return parts.join('\n\n');
 }
 
 export function buildTranscriptContext(transcript: TranscriptMessage[]): string {
@@ -423,7 +448,11 @@ export async function createSession(
   const config = await deps.getConfig();
   const transcript = await deps.getTranscriptByInstance(instance.id);
 
-  const systemPrompt = buildSystemPrompt(instance);
+  // Load identity and soul file contents
+  const identityContent = config.identity_file ? loadFileContent(config.identity_file) : null;
+  const soulContent = config.soul_file ? loadFileContent(config.soul_file) : null;
+
+  const systemPrompt = buildSystemPrompt(instance, identityContent, soulContent);
   const transcriptContext = buildTranscriptContext(transcript);
   const fullPrompt = transcriptContext ? `${systemPrompt}\n${transcriptContext}` : systemPrompt;
 

@@ -206,12 +206,7 @@ async function executeTool(
 
 function loadFileContent(filePath: string): string | null {
   try {
-    const content = fs.readFileSync(filePath, 'utf-8').trim();
-    // Skip files that only contain "N/A" placeholder
-    if (content === 'N/A' || content.endsWith('\nN/A') || content.endsWith('\n\nN/A')) {
-      return null;
-    }
-    return content;
+    return fs.readFileSync(filePath, 'utf-8').trim() || null;
   } catch {
     return null;
   }

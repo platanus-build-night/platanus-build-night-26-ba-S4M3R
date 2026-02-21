@@ -100,6 +100,10 @@ export interface RelayConfig {
   whatsapp_connected: boolean;
   telegram_connected: boolean;
   telegram_bot_token: string | null;
+  /** ElevenLabs API key for voice calls */
+  elevenlabs_api_key: string | null;
+  /** ElevenLabs phone number ID for outbound calls */
+  elevenlabs_phone_number_id: string | null;
   /** Default: 3214 */
   daemon_port: number;
   /** Path to IDENTITY.md file */

@@ -4,9 +4,25 @@ import * as WhatsApp from '../whatsapp/connection.js';
 import * as Telegram from '../telegram/connection.js';
 import * as TranscriptStore from '../store/transcripts.js';
 import * as InstanceStore from '../store/instances.js';
+import * as ConfigStore from '../store/config.js';
 import { transition } from '../engine/state-machine.js';
 import { createAgentAndCall } from '../elevenlabs/client.js';
 import logger from '../utils/logger.js';
+
+async function getElevenLabsConfig(): Promise<{ apiKey: string | null; phoneNumberId: string | null }> {
+  const apiKey = process.env.ELEVENLABS_API_KEY ?? null;
+  const phoneNumberId = process.env.ELEVENLABS_PHONE_NUMBER_ID ?? null;
+  if (apiKey && phoneNumberId) return { apiKey, phoneNumberId };
+  try {
+    const config = await ConfigStore.getConfig();
+    return {
+      apiKey: apiKey ?? config.elevenlabs_api_key,
+      phoneNumberId: phoneNumberId ?? config.elevenlabs_phone_number_id,
+    };
+  } catch {
+    return { apiKey, phoneNumberId };
+  }
+}
 
 // ============================================
 // Tool Context
@@ -318,20 +334,18 @@ function createPlaceCallTool(ctx: ToolContext): ToolDefinition {
     ): Promise<AgentToolResult<unknown>> {
       const { to_number, prompt, first_message } = params;
 
-      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const { apiKey, phoneNumberId } = await getElevenLabsConfig();
       if (!apiKey) {
-        logger.error('place_call: ELEVENLABS_API_KEY not set');
+        logger.error('place_call: ELEVENLABS_API_KEY not configured');
         return textResult(
-          JSON.stringify({ success: false, error: 'ELEVENLABS_API_KEY environment variable is not set' }),
+          JSON.stringify({ success: false, error: 'ElevenLabs API key is not configured. Set ELEVENLABS_API_KEY env var or store it in config.' }),
           undefined,
         );
       }
-
-      const phoneNumberId = process.env.ELEVENLABS_PHONE_NUMBER_ID;
       if (!phoneNumberId) {
-        logger.error('place_call: ELEVENLABS_PHONE_NUMBER_ID not set');
+        logger.error('place_call: ELEVENLABS_PHONE_NUMBER_ID not configured');
         return textResult(
-          JSON.stringify({ success: false, error: 'ELEVENLABS_PHONE_NUMBER_ID environment variable is not set' }),
+          JSON.stringify({ success: false, error: 'ElevenLabs phone number ID is not configured. Set ELEVENLABS_PHONE_NUMBER_ID env var or store it in config.' }),
           undefined,
         );
       }
@@ -380,13 +394,12 @@ function createEscalateToCallTool(ctx: ToolContext): ToolDefinition {
     ): Promise<AgentToolResult<unknown>> {
       const { reason, extra_context, first_message, language } = params;
 
-      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const { apiKey, phoneNumberId } = await getElevenLabsConfig();
       if (!apiKey) {
-        return textResult(JSON.stringify({ success: false, error: 'ELEVENLABS_API_KEY environment variable is not set' }), undefined);
+        return textResult(JSON.stringify({ success: false, error: 'ElevenLabs API key is not configured. Set ELEVENLABS_API_KEY env var or store it in config.' }), undefined);
       }
-      const phoneNumberId = process.env.ELEVENLABS_PHONE_NUMBER_ID;
       if (!phoneNumberId) {
-        return textResult(JSON.stringify({ success: false, error: 'ELEVENLABS_PHONE_NUMBER_ID environment variable is not set' }), undefined);
+        return textResult(JSON.stringify({ success: false, error: 'ElevenLabs phone number ID is not configured. Set ELEVENLABS_PHONE_NUMBER_ID env var or store it in config.' }), undefined);
       }
 
       try {

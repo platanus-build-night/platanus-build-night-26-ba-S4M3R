@@ -220,45 +220,45 @@ interface FeatureData {
 
 const FEATURES: FeatureData[] = [
   {
-    name: "Privilege Isolation",
+    name: "Separate Agent, Separate Permissions",
     icon: IconIsolation,
     description:
-      "Your main agent keeps full system access. relay gets conversation-only permissions. No shared execution context, no capability leakage.",
+      "Your Open Claw has filesystem, APIs, secrets. relay only knows how to talk. Two agents, clean boundary — relay can't touch what it shouldn't.",
     visual: IsolationVisual,
   },
   {
-    name: "Objective-Locked Execution",
+    name: "One Conversation, One Job",
     icon: IconObjective,
     description:
-      "Each conversation is scoped to a single objective with a structured todo list. The agent stays on task — ignores jailbreaks, topic changes, and off-scope requests.",
+      "Each conversation has a clear objective and a checklist. relay stays on task — no tangents, no jailbreaks, no scope creep.",
     visual: ObjectiveVisual,
   },
   {
-    name: "Persistent Follow-ups",
+    name: "It Follows Up So You Don't Have To",
     icon: IconHeartbeat,
     description:
-      "Contacts go silent. relay doesn't. Automatic heartbeat follow-ups with configurable intervals and limits — no manual babysitting.",
+      "People go silent. relay keeps nudging. Automatic follow-ups at intervals you set — your agent moves on to other work while relay waits.",
     visual: HeartbeatVisual,
   },
   {
-    name: "Full Observability",
+    name: "Your Agent Sees Everything",
     icon: IconObservability,
     description:
-      "Every message, every state change, every todo item — visible in real time. Your main agent always knows what's happening without being exposed.",
+      "Every message, every checklist update, every state change — reported back to your main agent in real time. Full visibility, zero exposure.",
     visual: ObservabilityVisual,
   },
   {
-    name: "Structured Lifecycle",
+    name: "Conversations Have Structure",
     icon: IconLifecycle,
     description:
-      "Conversations follow a state machine, not freeform chat. Every instance has a defined lifecycle — pause, resume, escalate, or abandon.",
+      "Not freeform chat. Every conversation follows a state machine — created, active, waiting, completed. Pause, resume, or cancel at any point.",
     visual: LifecycleVisual,
   },
   {
-    name: "Chat-to-Call Escalation",
+    name: "Text First, Call If Needed",
     icon: IconEscalation,
     description:
-      "Start on WhatsApp. If the conversation needs it, relay can escalate to a voice call — same objective, same isolation, same controls.",
+      "relay starts on WhatsApp. If the conversation needs a human voice, it can escalate to a call — same objective, same rules.",
     visual: EscalationVisual,
   },
 ];
@@ -396,7 +396,7 @@ export function Features() {
           animate={sectionInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.4, delay: 0.08 }}
         >
-          controlled conversations. structured state. no capability leakage.
+          everything relay does so your main agent doesn&apos;t have to.
         </motion.p>
         <div className="grid md:grid-cols-2 gap-4">
           {FEATURES.map((feature, i) => (

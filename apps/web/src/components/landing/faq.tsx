@@ -6,35 +6,35 @@ import { useRef, useState } from "react";
 const FAQS = [
   {
     q: "What LLM does relay use?",
-    a: "Bring your own. You configure your model API key during setup. relay is model-agnostic — it works with any LLM that your main agent already uses.",
+    a: "Yours. You bring your own API key during setup. relay is model-agnostic — it works with whatever LLM your main agent already runs on.",
   },
   {
-    q: "Can the external agent access my filesystem or APIs?",
-    a: "No. This is enforced at the architecture level, not via prompts. The relay agent only has access to conversation-scoped tools: send_message, mark_todo_item, end_conversation, and schedule_next_heartbeat. Nothing else exists in its runtime.",
+    q: "Can relay access my files, APIs, or secrets?",
+    a: "No. relay only has four tools: send a message, mark a checklist item, end a conversation, and schedule a follow-up. That's it. No filesystem, no shell, no internal APIs. Enforced at the architecture level.",
   },
   {
-    q: "What happens if a contact tries to jailbreak the agent?",
-    a: "The agent is objective-locked. It can only speak and act within the defined objective. Attempts to change topic, extract system information, or redirect behavior are ignored. The agent has no knowledge or access to leak.",
+    q: "What if someone tries to jailbreak relay?",
+    a: "There's nothing to jailbreak. relay is objective-locked — it only knows about the current conversation goal. It has no access to your system, no secrets to leak, no commands to run.",
   },
   {
-    q: "Can I run multiple conversations at once?",
-    a: "Yes. You can create as many conversation instances as you need. Per contact, only one instance is active at a time — additional instances are queued FIFO and execute in order.",
+    q: "Can my agent run multiple conversations at once?",
+    a: "Yes. Create as many conversation instances as you need. One active instance per contact — the rest queue up and run in order.",
   },
   {
-    q: "What channels are supported?",
-    a: "WhatsApp messaging via Baileys v7, with voice call escalation via ElevenLabs. The agent can start on chat and seamlessly escalate to a call within the same conversation instance.",
+    q: "What channels does relay support?",
+    a: "WhatsApp messaging, with voice call escalation. relay starts on chat and can switch to a call within the same conversation if needed.",
   },
   {
-    q: "What if the contact stops responding?",
-    a: "The heartbeat system handles it. After a configurable interval (default 30 minutes), relay automatically sends a follow-up. You set the max number of follow-ups per instance. If the limit is exceeded, the instance moves to ABANDONED.",
+    q: "What if the person stops replying?",
+    a: "relay follows up automatically. You set the interval and max retries. If they still don't respond, the conversation moves to ABANDONED and your agent gets notified.",
   },
   {
-    q: "Can I intervene in an active conversation?",
-    a: "Yes. You can pause, resume, or cancel any instance at any point. You can also inject manual messages into the conversation as the agent, or trigger a human intervention state that halts autonomous execution.",
+    q: "Can I step into a conversation relay is handling?",
+    a: "Yes. Pause, resume, or cancel any conversation at any time. You can also inject messages manually or trigger a human takeover that stops relay's autonomous responses.",
   },
   {
-    q: "Is this just a chatbot builder?",
-    a: "No. relay is a privilege-isolated conversational execution layer. It doesn't build chatbots — it lets your existing AI agent delegate human conversations without exposing internal capabilities. Think of it as a firewall between your agent and the outside world.",
+    q: "Is this a chatbot builder?",
+    a: "No. relay is a second agent — a sibling to your main one. It doesn't build chatbots. It lets your existing agent delegate the human-facing part of its work without exposing any internal capabilities.",
   },
 ];
 
@@ -98,7 +98,7 @@ export function Faq() {
           animate={sectionInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.4, delay: 0.08 }}
         >
-          common questions about relay&apos;s architecture and capabilities.
+          how relay works alongside your main agent.
         </motion.p>
 
         <div>

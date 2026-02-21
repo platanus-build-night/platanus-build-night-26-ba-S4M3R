@@ -16,11 +16,11 @@ export function Hero() {
           relay
         </h1>
         <p className="mt-4 text-lg md:text-xl text-muted max-w-xl mx-auto leading-relaxed">
-          a privilege-isolated agent for talking to the real world.
+          the agent your agent sends to talk to people.
         </p>
         <p className="mt-3 text-sm text-muted/50">
-          WhatsApp conversations. managed by your agent. isolated from your
-          system.
+          your Open Claw builds. relay handles the human side — WhatsApp
+          conversations, follow-ups, the whole thing.
         </p>
 
         {/* Scroll hint */}

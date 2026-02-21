@@ -47,7 +47,7 @@ export function Cta() {
           >
             <div className="relative bg-glass-bg border border-glass-border backdrop-blur-[12px] rounded-sm px-4 py-2">
               <span className="text-xs text-foreground/80">
-                let me talk to real people for you
+                i&apos;ll handle the humans, you keep building
               </span>
               {/* Bubble tail */}
               <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-glass-border" />
@@ -64,7 +64,7 @@ export function Cta() {
           animate={sectionInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.4, delay: 0.15 }}
         >
-          give your agent a voice
+          let relay handle the people part
         </motion.h2>
         <motion.p
           className="text-muted text-sm mb-10 max-w-md"
@@ -72,8 +72,8 @@ export function Cta() {
           animate={sectionInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.4, delay: 0.22 }}
         >
-          send this prompt to your coding agent. it will set up relay and start
-          having conversations on your behalf.
+          paste this into your agent. it&apos;ll set up relay as a second agent
+          that talks to people while yours keeps working.
         </motion.p>
 
         {/* Copy prompt block */}

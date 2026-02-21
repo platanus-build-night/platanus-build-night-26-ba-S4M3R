@@ -87,7 +87,7 @@ function OpenClawAlone({ inView }: { inView: boolean }) {
           <OpenClawLogo size={32} />
           <div className="text-xs font-bold">Open Claw</div>
           <div className="text-[10px] text-muted">
-            talks directly to humans
+            doing everything alone
           </div>
         </div>
       </motion.div>
@@ -188,7 +188,7 @@ function OpenClawWithRelay({ inView }: { inView: boolean }) {
           <OpenClawLogo size={32} />
           <div className="text-xs font-bold">Open Claw</div>
           <div className="text-[10px] text-muted">
-            delegates to relay
+            sends its brother to talk
           </div>
         </div>
       </motion.div>
@@ -306,7 +306,7 @@ export function SecurityModel() {
           animate={sectionInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.4 }}
         >
-          Open Claw is powerful. that&apos;s the problem.
+          your Open Claw shouldn&apos;t talk to strangers.
         </motion.h2>
         <motion.p
           className="text-muted text-sm mb-12 max-w-xl"
@@ -314,9 +314,10 @@ export function SecurityModel() {
           animate={sectionInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.4, delay: 0.08 }}
         >
-          Open Claw gives your agent full system access. when it talks to humans
-          directly, all of that is exposed. relay plugs in as the isolation
-          layer — same agent, same power, none of the risk.
+          Open Claw has filesystem access, shell commands, your secrets. letting
+          it chat directly with people means all of that is one prompt injection
+          away. relay is the sibling that handles the conversation — same
+          mission, none of the access.
         </motion.p>
 
         {/* Side-by-side comparison */}
@@ -356,8 +357,8 @@ export function SecurityModel() {
           transition={{ duration: 0.4, delay: 1.6 }}
         >
           <p className="text-[11px] text-muted/40">
-            relay is the isolation layer for Open Claw — same workflow, enforced
-            boundaries.
+            same family, different permissions. relay talks so Open Claw
+            doesn&apos;t have to.
           </p>
         </motion.div>
       </div>

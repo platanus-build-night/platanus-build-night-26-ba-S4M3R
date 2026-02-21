@@ -24,19 +24,23 @@ It **only**:
 - Tracks todo item completion
 - Manages conversation lifecycle
 - Schedules heartbeat follow-ups
+- Flags conversations for human intervention
 
 ## Conversation-Scoped Tools
 
-Each conversation instance runs an isolated agent session with exactly four tools:
+Each conversation instance runs an isolated agent session with exactly five tools:
 
 | Tool | Purpose |
 |------|---------|
 | `send_message(text)` | Deliver a message via WhatsApp |
-| `mark_todo_item(todo_id, status)` | Track checklist progress |
-| `end_conversation(reason)` | Close the conversation |
-| `schedule_next_heartbeat(delay)` | Set the next follow-up timer |
+| `mark_todo_item(todo_id, status)` | Track checklist progress (`pending`, `in_progress`, `completed`, `skipped`) |
+| `end_conversation(reason)` | Close the conversation as completed |
+| `request_human_intervention(reason)` | Flag the conversation for human review, transitions to `NEEDS_HUMAN_INTERVENTION` |
+| `schedule_next_heartbeat(delay_ms)` | Override the delay before the next follow-up timer |
 
 No tool injection. No arbitrary instructions. No escape from this scope.
+
+> **Note**: A `place_call` tool is defined as a stub for future voice call support. It always returns a "not available" response in v1.
 
 ## Network Boundary
 
@@ -51,7 +55,7 @@ No external HTTP listeners. No webhooks (v1). No cloud connectivity.
 
 - All external input (WhatsApp messages from contacts) is isolated within the conversation instance
 - Contact messages are never exposed to the main agent's execution context
-- WhatsApp auth credentials are stored locally in `.relay-agent/` with filesystem-level permissions
+- WhatsApp auth credentials are stored locally in `.relay-agent/whatsapp-auth/` with filesystem-level permissions
 - All state persists as JSON files via lowdb
 
 ## Design Principle

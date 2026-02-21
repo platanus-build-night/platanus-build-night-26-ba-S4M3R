@@ -7,15 +7,21 @@ description: Get relay running in under 10 minutes.
 
 Get relay running and create your first WhatsApp conversation.
 
-## 1. Initialize
+## 1. Connect WhatsApp
 
-Set up WhatsApp authentication by scanning the QR code:
+Authenticate with WhatsApp by scanning a QR code:
 
 ```bash
-relay init
+relay whatsapp login
 ```
 
-This displays a QR code in your terminal. Scan it with WhatsApp to authenticate. Auth state persists in `.relay-agent/` and reconnects automatically on restart.
+A QR code appears in your terminal. Scan it with your WhatsApp app. Auth state is saved locally in `.relay-agent/whatsapp-auth/` and reconnects automatically on restart.
+
+You can verify the connection at any time:
+
+```bash
+relay whatsapp status
+```
 
 ## 2. Start the Daemon
 
@@ -27,27 +33,37 @@ relay start
 
 The daemon runs on `localhost:3214` and maintains the WhatsApp connection. All CLI commands communicate with the daemon via HTTP.
 
-## 3. Create a Conversation
+## 3. Configure API Credentials
 
-Create a new conversation instance with an objective and optional todo list:
+Set up the model provider for agent sessions:
+
+```bash
+relay init --api-key sk-ant-... --provider anthropic
+```
+
+You can also use `--provider openai` with an OpenAI key. If you omit the flags, the command prompts interactively. Alternatively, set the `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` environment variable.
+
+## 4. Create a Conversation
+
+Create a new conversation instance with an objective and todo list:
 
 ```bash
 relay create \
   --contact="+56912345678" \
   --objective="confirm delivery time for order #4421" \
-  --todo="ask preferred time,confirm address,get signature name" \
-  --heartbeat=30m \
+  --todos="ask preferred time,confirm address,get signature name" \
+  --heartbeat-interval=1800000 \
   --max-followups=5
 ```
 
-Returns a unique instance ID (e.g., `cnv_7f3a`). The agent sends an initial message via WhatsApp and the conversation begins.
+Returns a unique instance ID. The agent sends an initial message via WhatsApp and the conversation begins.
 
-## 4. Monitor Progress
+## 5. Monitor Progress
 
 Check the state of your conversation:
 
 ```bash
-relay get cnv_7f3a
+relay get <instance-id>
 ```
 
 List all active instances:
@@ -59,26 +75,26 @@ relay list
 Read the full transcript:
 
 ```bash
-relay transcript cnv_7f3a
+relay transcript <instance-id>
 ```
 
-## 5. Control the Conversation
+## 6. Control the Conversation
 
 Pause, resume, or cancel at any time:
 
 ```bash
-relay pause cnv_7f3a
-relay resume cnv_7f3a
-relay cancel cnv_7f3a
+relay pause <instance-id>
+relay resume <instance-id>
+relay cancel <instance-id>
 ```
 
 Inject a message manually when needed:
 
 ```bash
-relay send cnv_7f3a "Sorry for the delay, checking now"
+relay send <instance-id> "Sorry for the delay, checking now"
 ```
 
-## 6. Stop the Daemon
+## 7. Stop the Daemon
 
 When you're done:
 
@@ -87,5 +103,3 @@ relay stop
 ```
 
 All state is flushed to disk and persists for the next session.
-
-> **Note**: relay is under active development. This documents the intended CLI interface.

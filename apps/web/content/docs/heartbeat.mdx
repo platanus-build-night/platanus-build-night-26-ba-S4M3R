@@ -24,18 +24,20 @@ Set heartbeat parameters when creating a conversation:
 relay create \
   --contact="+56912345678" \
   --objective="confirm delivery" \
-  --heartbeat=30m \
+  --todos="ask ETA" \
+  --heartbeat-interval=1800000 \
   --max-followups=5
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `--heartbeat` | 30m | Time to wait before sending a follow-up |
-| `--max-followups` | 5 | Maximum number of follow-up attempts |
+| `--heartbeat-interval` | `1800000` (30 min) | Time in milliseconds to wait before sending a follow-up |
+| `--max-followups` | `5` | Maximum number of follow-up attempts |
+
+The agent can also override the next heartbeat delay dynamically using the `schedule_next_heartbeat(delay_ms)` tool during a conversation.
 
 ## Behavior
 
-- **Timer accuracy**: within 30 seconds of the scheduled time
 - **Follow-up content**: the agent decides the follow-up message based on conversation context and objective
 - **Abandonment**: when max follow-ups are reached and the contact still has not responded, the instance transitions to `ABANDONED`
 - **Pausing**: when an instance is paused, heartbeat timers are suspended. They resume when the instance is resumed.
@@ -45,10 +47,9 @@ relay create \
 Check heartbeat state for an instance:
 
 ```bash
-relay get cnv_7f3a
+relay get <instance-id>
 ```
 
 Output includes:
 - Current follow-up count (e.g., `2/5`)
-- Time until next heartbeat
-- Whether heartbeats are active or suspended
+- Heartbeat configuration (interval and max follow-ups)

@@ -33,6 +33,12 @@ CREATED → ACTIVE → WAITING_FOR_REPLY → WAITING_FOR_AGENT → ACTIVE → ..
 
 The conversation cycles between `ACTIVE`, `WAITING_FOR_REPLY`, and `WAITING_FOR_AGENT` until the agent calls `end_conversation()`.
 
+- `ACTIVE → WAITING_FOR_REPLY` — agent sends a message (`message_sent`)
+- `WAITING_FOR_REPLY → WAITING_FOR_AGENT` — contact replies (`contact_replies`)
+- `WAITING_FOR_AGENT → ACTIVE` — agent finishes processing (`agent_processes_reply`)
+- `WAITING_FOR_AGENT → WAITING_FOR_REPLY` — agent sends another message before finishing (`message_sent`)
+- `ACTIVE → WAITING_FOR_AGENT` — contact replies while agent is active (`contact_replies`)
+
 ### Heartbeat Flow
 
 ```
@@ -64,8 +70,18 @@ WAITING_FOR_REPLY → PAUSED → WAITING_FOR_REPLY
 
 ### Human Intervention
 
+The agent can flag a conversation for human review:
+
 ```
 ACTIVE → NEEDS_HUMAN_INTERVENTION → ACTIVE  (via relay resume or relay send)
+```
+
+### Error Handling
+
+Unrecoverable errors transition to `FAILED`:
+
+```
+ACTIVE → FAILED  (unrecoverable_error)
 ```
 
 ### Cancellation
@@ -75,6 +91,45 @@ Any non-terminal state can be cancelled:
 ```
 (any non-terminal) → FAILED  (reason: "cancelled")
 ```
+
+## Complete Transition Table
+
+| From State | Event | To State |
+|------------|-------|----------|
+| `CREATED` | `agent_sends_first_message` | `ACTIVE` |
+| `CREATED` | `contact_has_active_instance` | `QUEUED` |
+| `CREATED` | `pause` | `PAUSED` |
+| `CREATED` | `cancel` | `FAILED` |
+| `QUEUED` | `prior_instance_terminal` | `CREATED` |
+| `QUEUED` | `pause` | `PAUSED` |
+| `QUEUED` | `cancel` | `FAILED` |
+| `ACTIVE` | `message_sent` | `WAITING_FOR_REPLY` |
+| `ACTIVE` | `contact_replies` | `WAITING_FOR_AGENT` |
+| `ACTIVE` | `end_conversation` | `COMPLETED` |
+| `ACTIVE` | `request_intervention` | `NEEDS_HUMAN_INTERVENTION` |
+| `ACTIVE` | `unrecoverable_error` | `FAILED` |
+| `ACTIVE` | `pause` | `PAUSED` |
+| `ACTIVE` | `cancel` | `FAILED` |
+| `WAITING_FOR_REPLY` | `contact_replies` | `WAITING_FOR_AGENT` |
+| `WAITING_FOR_REPLY` | `heartbeat_fires` | `HEARTBEAT_SCHEDULED` |
+| `WAITING_FOR_REPLY` | `end_conversation` | `COMPLETED` |
+| `WAITING_FOR_REPLY` | `pause` | `PAUSED` |
+| `WAITING_FOR_REPLY` | `cancel` | `FAILED` |
+| `WAITING_FOR_AGENT` | `message_sent` | `WAITING_FOR_REPLY` |
+| `WAITING_FOR_AGENT` | `agent_processes_reply` | `ACTIVE` |
+| `WAITING_FOR_AGENT` | `end_conversation` | `COMPLETED` |
+| `WAITING_FOR_AGENT` | `pause` | `PAUSED` |
+| `WAITING_FOR_AGENT` | `cancel` | `FAILED` |
+| `HEARTBEAT_SCHEDULED` | `followup_sent` | `WAITING_FOR_REPLY` |
+| `HEARTBEAT_SCHEDULED` | `max_followups_exceeded` | `ABANDONED` |
+| `HEARTBEAT_SCHEDULED` | `pause` | `PAUSED` |
+| `HEARTBEAT_SCHEDULED` | `cancel` | `FAILED` |
+| `PAUSED` | `resume` | *(previous state)* |
+| `PAUSED` | `cancel` | `FAILED` |
+| `NEEDS_HUMAN_INTERVENTION` | `resume` | `ACTIVE` |
+| `NEEDS_HUMAN_INTERVENTION` | `manual_send` | `ACTIVE` |
+| `NEEDS_HUMAN_INTERVENTION` | `pause` | `PAUSED` |
+| `NEEDS_HUMAN_INTERVENTION` | `cancel` | `FAILED` |
 
 ## Terminal States
 

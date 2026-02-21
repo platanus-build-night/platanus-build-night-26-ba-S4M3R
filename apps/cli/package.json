@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "relay": "./dist/index.js"
+    "relay-agent": "./dist/index.js"
   },
   "files": [
     "dist"

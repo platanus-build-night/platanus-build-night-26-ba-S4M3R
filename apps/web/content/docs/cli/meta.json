@@ -1,0 +1,21 @@
+{
+  "title": "CLI",
+  "pages": [
+    "index",
+    "init",
+    "start",
+    "stop",
+    "status",
+    "whatsapp-login",
+    "whatsapp-logout",
+    "whatsapp-status",
+    "create",
+    "list",
+    "get",
+    "transcript",
+    "pause",
+    "resume",
+    "cancel",
+    "send"
+  ]
+}

@@ -1,3 +1,3 @@
 {
-  "pages": ["index", "quickstart", "cli-reference", "state-machine", "heartbeat", "security-model"]
+  "pages": ["index", "quickstart", "---CLI---", "...cli", "---Concepts---", "state-machine", "heartbeat", "security-model"]
 }

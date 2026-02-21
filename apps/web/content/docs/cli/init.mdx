@@ -1,0 +1,23 @@
+---
+title: relay init
+description: Initialize relay configuration.
+---
+
+# relay init
+
+Initialize relay configuration. Sets the model API key and provider used for agent sessions. If flags are omitted, the command prompts interactively.
+
+```bash
+relay init
+relay init --api-key sk-ant-... --provider anthropic
+relay init --api-key sk-... --provider openai
+```
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--api-key <key>` | Model API key (Anthropic or OpenAI) |
+| `--provider <provider>` | Model provider: `anthropic` or `openai` |
+
+The daemon must be running before calling `relay init`. Configuration is saved to `.relay-agent/config.json`.

@@ -1,0 +1,39 @@
+---
+title: Overview
+description: Complete reference for all relay CLI commands.
+---
+
+# CLI Reference
+
+All commands communicate with the relay daemon via HTTP on `localhost:3214`.
+
+## Authentication Priority
+
+relay resolves API credentials in this order:
+
+1. **`relay init`** — API key and provider saved via the init command
+2. **Environment variables** — `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
+3. **Claude subscription** — OAuth token from Claude Code login (auto-refreshes)
+4. **Codex subscription** — OAuth token from Codex login
+
+If no credentials are found, the daemon logs an error when attempting to create an agent session.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key (used if no key set via `relay init`) |
+| `OPENAI_API_KEY` | OpenAI API key (used with `--provider openai`) |
+
+## Data Directory
+
+relay stores all state in `.relay-agent/` relative to your working directory:
+
+```
+.relay-agent/
+├── config.json          # API key, provider, daemon port
+├── db.json              # Instance and transcript data (lowdb)
+├── whatsapp-auth/       # Baileys v7 authentication state
+├── logs/                # Daemon log files (pino)
+└── daemon.pid           # PID file for the running daemon
+```

@@ -1,0 +1,66 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bodyGrad" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="60%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </radialGradient>
+    <radialGradient id="eyeGrad" cx="45%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <radialGradient id="pupilGrad" cx="40%" cy="35%" r="50%">
+      <stop offset="0%" stop-color="#020617"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <linearGradient id="bodyHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.12)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Main cloud body -->
+  <ellipse cx="200" cy="220" rx="120" ry="115" fill="url(#bodyGrad)"/>
+  <ellipse cx="150" cy="145" rx="60" ry="55" fill="url(#bodyGrad)"/>
+  <ellipse cx="250" cy="150" rx="52" ry="50" fill="url(#bodyGrad)"/>
+  <ellipse cx="200" cy="130" rx="50" ry="47" fill="url(#bodyGrad)"/>
+  <ellipse cx="115" cy="200" rx="47" ry="55" fill="url(#bodyGrad)"/>
+  <ellipse cx="285" cy="205" rx="45" ry="53" fill="url(#bodyGrad)"/>
+  <ellipse cx="200" cy="285" rx="100" ry="55" fill="url(#bodyGrad)"/>
+
+  <ellipse cx="200" cy="220" rx="120" ry="115" fill="url(#bodyHighlight)"/>
+  <ellipse cx="150" cy="145" rx="60" ry="55" fill="url(#bodyHighlight)"/>
+  <ellipse cx="250" cy="150" rx="52" ry="50" fill="url(#bodyHighlight)"/>
+  <ellipse cx="200" cy="130" rx="50" ry="47" fill="url(#bodyHighlight)"/>
+
+  <!-- Antenna bumps -->
+  <ellipse cx="170" cy="100" rx="14" ry="18" fill="#3B82F6"/>
+  <ellipse cx="170" cy="100" rx="14" ry="18" fill="url(#bodyHighlight)"/>
+  <ellipse cx="170" cy="91" rx="9" ry="9" fill="#60A5FA" opacity="0.6"/>
+  <ellipse cx="230" cy="105" rx="12" ry="16" fill="#3B82F6"/>
+  <ellipse cx="230" cy="105" rx="12" ry="16" fill="url(#bodyHighlight)"/>
+  <ellipse cx="230" cy="97" rx="8" ry="8" fill="#60A5FA" opacity="0.6"/>
+
+  <!-- Eyes -->
+  <ellipse cx="170" cy="210" rx="26" ry="28" fill="url(#eyeGrad)"/>
+  <ellipse cx="172" cy="208" rx="13" ry="15" fill="url(#pupilGrad)"/>
+  <ellipse cx="163" cy="200" rx="7" ry="8" fill="white" opacity="0.85"/>
+  <ellipse cx="176" cy="216" rx="3.5" ry="4" fill="white" opacity="0.4"/>
+  <ellipse cx="170" cy="210" rx="26" ry="28" fill="none" stroke="#67E8F9" stroke-width="1.5" opacity="0.3"/>
+
+  <ellipse cx="230" cy="210" rx="26" ry="28" fill="url(#eyeGrad)"/>
+  <ellipse cx="232" cy="208" rx="13" ry="15" fill="url(#pupilGrad)"/>
+  <ellipse cx="223" cy="200" rx="7" ry="8" fill="white" opacity="0.85"/>
+  <ellipse cx="236" cy="216" rx="3.5" ry="4" fill="white" opacity="0.4"/>
+  <ellipse cx="230" cy="210" rx="26" ry="28" fill="none" stroke="#67E8F9" stroke-width="1.5" opacity="0.3"/>
+
+  <!-- Mouth -->
+  <path d="M 188 244 Q 200 256 212 244" fill="none" stroke="#2563EB" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Cheek blush -->
+  <ellipse cx="145" cy="230" rx="14" ry="8" fill="#60A5FA" opacity="0.15"/>
+  <ellipse cx="255" cy="230" rx="14" ry="8" fill="#60A5FA" opacity="0.15"/>
+
+  <!-- Specular highlight -->
+  <ellipse cx="185" cy="140" rx="30" ry="12" fill="white" opacity="0.08"/>
+</svg>

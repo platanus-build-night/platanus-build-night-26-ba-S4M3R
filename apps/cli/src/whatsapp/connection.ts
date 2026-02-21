@@ -7,6 +7,7 @@ import makeWASocket, {
   type WAMessage,
 } from '@whiskeysockets/baileys';
 import type { Boom } from '@hapi/boom';
+import qrcode from 'qrcode-terminal';
 import logger from '../utils/logger.js';
 import { updateConfig } from '../store/config.js';
 
@@ -96,9 +97,18 @@ export async function connectWhatsApp(): Promise<void> {
     handleConnectionUpdate(update, sock, saveCreds);
   });
 
+  // --- LID ↔ Phone mapping from Baileys --------------------------------------
+  sock.ev.on('lid-mapping.update', (mapping: { lid: string; pn: string }) => {
+    const lidJid = `${mapping.lid}@lid`;
+    const phoneJid = `${mapping.pn}@s.whatsapp.net`;
+    lidToPhoneMap.set(lidJid, phoneJid);
+    phoneToLidMap.set(phoneJid, lidJid);
+    logger.info({ lid: lidJid, phoneJid }, 'LID→phone mapping from lid-mapping.update event');
+  });
+
   // --- Incoming messages -----------------------------------------------------
   sock.ev.on('messages.upsert', (upsert) => {
-    handleMessagesUpsert(upsert);
+    handleMessagesUpsert(upsert, sock);
   });
 }
 
@@ -114,7 +124,8 @@ function handleConnectionUpdate(
   const { connection, lastDisconnect, qr } = update;
 
   if (qr) {
-    logger.info('QR code displayed in terminal. Scan with WhatsApp to authenticate.');
+    logger.info('QR code received. Rendering in terminal...');
+    qrcode.generate(qr, { small: true });
   }
 
   if (connection === 'open') {
@@ -156,7 +167,7 @@ function handleMessagesUpsert(upsert: {
   messages: WAMessage[];
   type: string;
   requestId?: string;
-}): void {
+}, sock: WASocket): void {
   // Only process real-time notifications, not history sync
   if (upsert.type !== 'notify') {
     return;
@@ -173,43 +184,81 @@ function handleMessagesUpsert(upsert: {
       continue;
     }
 
-    let senderJid = msg.key.remoteJid ?? '';
+    const remoteJid = msg.key.remoteJid ?? '';
 
-    // Resolve LID-based JIDs to phone-based JIDs using our mapping
-    if (senderJid.endsWith('@lid') && lidToPhoneMap.has(senderJid)) {
+    // Resolve LID asynchronously, then dispatch
+    void resolveSenderAndDispatch(remoteJid, text, msg, sock);
+  }
+}
+
+async function resolveSenderAndDispatch(
+  remoteJid: string,
+  text: string,
+  msg: WAMessage,
+  sock: WASocket,
+): Promise<void> {
+  let senderJid = remoteJid;
+
+  // Resolve LID-based JIDs to phone-based JIDs
+  if (senderJid.endsWith('@lid')) {
+    // 1. Check our local mapping first
+    if (lidToPhoneMap.has(senderJid)) {
       const resolvedJid = lidToPhoneMap.get(senderJid)!;
-      logger.info({ originalJid: senderJid, resolvedJid }, 'Resolved LID to phone JID');
+      logger.info({ originalJid: senderJid, resolvedJid }, 'Resolved LID via local map');
       senderJid = resolvedJid;
-    }
-
-    const senderPhone = jidToPhone(senderJid);
-    const timestamp = msg.messageTimestamp
-      ? new Date(
-          typeof msg.messageTimestamp === 'number'
-            ? msg.messageTimestamp * 1000
-            : Number(msg.messageTimestamp) * 1000,
-        ).toISOString()
-      : new Date().toISOString();
-
-    const incoming: IncomingMessage = {
-      senderPhone,
-      senderJid,
-      text,
-      timestamp,
-      raw: msg,
-    };
-
-    logger.info(
-      { senderPhone, senderJid, textLength: text.length },
-      'Incoming WhatsApp message',
-    );
-
-    for (const cb of messageCallbacks) {
+    } else {
+      // 2. Try Baileys' built-in lidMapping store (persisted in auth state)
       try {
-        cb(incoming);
+        const signalRepo = (sock as unknown as { signalRepository: { lidMapping: { getPNForLID(lid: string): Promise<string | null> } } }).signalRepository?.lidMapping;
+        if (signalRepo) {
+          const rawPhoneNumber = await signalRepo.getPNForLID(senderJid);
+          if (rawPhoneNumber) {
+            // Strip device suffix (e.g. "5491165191699:0@s.whatsapp.net" → "5491165191699@s.whatsapp.net")
+            const phoneNumber = rawPhoneNumber.replace(/:\d+(@|$)/, '$1');
+            const fullPhoneJid = phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`;
+            lidToPhoneMap.set(senderJid, fullPhoneJid);
+            phoneToLidMap.set(fullPhoneJid, senderJid);
+            logger.info({ originalJid: senderJid, resolvedJid: fullPhoneJid }, 'Resolved LID via Baileys lidMapping store');
+            senderJid = fullPhoneJid;
+          } else {
+            logger.warn({ lid: senderJid, mapSize: lidToPhoneMap.size }, 'Unresolved LID — Baileys store returned null');
+          }
+        } else {
+          logger.warn({ lid: senderJid }, 'Unresolved LID — lidMapping store not available on socket');
+        }
       } catch (err) {
-        logger.error({ err }, 'Error in message callback');
+        logger.warn({ lid: senderJid, err }, 'Unresolved LID — lidMapping store lookup failed');
       }
+    }
+  }
+
+  const senderPhone = jidToPhone(senderJid);
+  const timestamp = msg.messageTimestamp
+    ? new Date(
+        typeof msg.messageTimestamp === 'number'
+          ? msg.messageTimestamp * 1000
+          : Number(msg.messageTimestamp) * 1000,
+      ).toISOString()
+    : new Date().toISOString();
+
+  const incoming: IncomingMessage = {
+    senderPhone,
+    senderJid,
+    text,
+    timestamp,
+    raw: msg,
+  };
+
+  logger.info(
+    { senderPhone, senderJid, textLength: text.length },
+    'Incoming WhatsApp message',
+  );
+
+  for (const cb of messageCallbacks) {
+    try {
+      cb(incoming);
+    } catch (err) {
+      logger.error({ err }, 'Error in message callback');
     }
   }
 }
@@ -287,7 +336,7 @@ export async function sendMessage(jid: string, text: string): Promise<void> {
   }
 
   const result = await socket.sendMessage(jid, { text });
-  logger.debug({ jid, textLength: text.length }, 'WhatsApp message sent');
+  logger.info({ jid, textLength: text.length, resultRemoteJid: result?.key?.remoteJid, resultParticipant: result?.key?.participant }, 'WhatsApp message sent');
 
   // Track LID mapping: if the sent message's key has a different remoteJid (LID),
   // map it back to the phone JID we intended
@@ -295,7 +344,7 @@ export async function sendMessage(jid: string, text: string): Promise<void> {
     const lid = result.key.remoteJid;
     lidToPhoneMap.set(lid, jid);
     phoneToLidMap.set(jid, lid);
-    logger.info({ lid, phoneJid: jid }, 'Mapped LID to phone JID');
+    logger.info({ lid, phoneJid: jid }, 'Mapped LID→phone JID from sendMessage result');
   }
 }
 

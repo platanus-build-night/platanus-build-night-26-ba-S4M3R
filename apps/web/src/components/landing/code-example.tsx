@@ -25,7 +25,7 @@ export function CodeExample({
       <TerminalBlock lines={lines} />
       <button
         onClick={handleCopy}
-        className="absolute top-2 right-2 text-muted hover:text-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity bg-[#111] border border-glass-border rounded-sm px-2 py-1"
+        className="absolute top-2 right-2 text-muted hover:text-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity bg-[rgba(59,130,246,0.06)] border border-[rgba(59,130,246,0.12)] rounded-sm px-2 py-1"
       >
         {copied ? "copied" : "copy"}
       </button>

@@ -7,7 +7,7 @@ export function TerminalBlock({
 }) {
   return (
     <div
-      className={`bg-[#111] border border-glass-border rounded-sm p-4 font-mono text-sm ${className ?? ""}`}
+      className={`bg-transparent border border-[rgba(59,130,246,0.08)] rounded-sm p-4 font-mono text-sm ${className ?? ""}`}
     >
       {lines.map((line, i) => (
         <div key={i} className="flex gap-2">

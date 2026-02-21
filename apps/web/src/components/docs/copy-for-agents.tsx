@@ -30,11 +30,11 @@ export function CopyForAgents({ slug }: { slug: string }) {
         background:
           state === "copied"
             ? "rgba(59, 130, 246, 0.08)"
-            : "rgba(255, 255, 255, 0.03)",
+            : "transparent",
         borderColor:
           state === "copied"
             ? "rgba(59, 130, 246, 0.3)"
-            : "rgba(255, 255, 255, 0.1)",
+            : "rgba(59, 130, 246, 0.1)",
         color: state === "copied" ? "#3B82F6" : "#9A9590",
       }}
       disabled={state === "copying"}

@@ -87,10 +87,10 @@ export function Cta() {
             onClick={handleCopy}
             className="w-full text-left rounded-sm border transition-colors duration-200 cursor-pointer group"
             style={{
-              background: copied ? "rgba(59, 130, 246, 0.06)" : "#111",
+              background: copied ? "rgba(59, 130, 246, 0.06)" : "transparent",
               borderColor: copied
                 ? "rgba(59, 130, 246, 0.25)"
-                : "rgba(255, 255, 255, 0.1)",
+                : "rgba(59, 130, 246, 0.08)",
             }}
           >
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-glass-border">

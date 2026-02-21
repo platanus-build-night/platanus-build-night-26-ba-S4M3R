@@ -229,10 +229,17 @@ async function executeTool(
         language?: string;
       };
 
-      const apiKey = process.env.ELEVENLABS_API_KEY;
-      if (!apiKey) return JSON.stringify({ success: false, error: 'ELEVENLABS_API_KEY not set' });
-      const phoneNumberId = process.env.ELEVENLABS_PHONE_NUMBER_ID;
-      if (!phoneNumberId) return JSON.stringify({ success: false, error: 'ELEVENLABS_PHONE_NUMBER_ID not set' });
+      let apiKey = process.env.ELEVENLABS_API_KEY ?? null;
+      let phoneNumberId = process.env.ELEVENLABS_PHONE_NUMBER_ID ?? null;
+      if (!apiKey || !phoneNumberId) {
+        try {
+          const cfg = await ConfigStore.getConfig();
+          apiKey = apiKey ?? cfg.elevenlabs_api_key;
+          phoneNumberId = phoneNumberId ?? cfg.elevenlabs_phone_number_id;
+        } catch { /* ignore */ }
+      }
+      if (!apiKey) return JSON.stringify({ success: false, error: 'ElevenLabs API key not configured' });
+      if (!phoneNumberId) return JSON.stringify({ success: false, error: 'ElevenLabs phone number ID not configured' });
 
       const instance = await InstanceStore.getById(instanceId);
       if (!instance) return JSON.stringify({ success: false, error: 'Instance not found' });

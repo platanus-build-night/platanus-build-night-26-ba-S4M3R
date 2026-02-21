@@ -10,17 +10,18 @@ import { createAgentAndCall } from '../elevenlabs/client.js';
 import logger from '../utils/logger.js';
 
 async function getElevenLabsConfig(): Promise<{ apiKey: string | null; phoneNumberId: string | null }> {
-  const apiKey = process.env.ELEVENLABS_API_KEY ?? null;
-  const phoneNumberId = process.env.ELEVENLABS_PHONE_NUMBER_ID ?? null;
-  if (apiKey && phoneNumberId) return { apiKey, phoneNumberId };
+  const envApiKey = process.env.ELEVENLABS_API_KEY ?? null;
+  const envPhoneId = process.env.ELEVENLABS_PHONE_NUMBER_ID ?? null;
+  if (envApiKey && envPhoneId) return { apiKey: envApiKey, phoneNumberId: envPhoneId };
   try {
     const config = await ConfigStore.getConfig();
-    return {
-      apiKey: apiKey ?? config.elevenlabs_api_key,
-      phoneNumberId: phoneNumberId ?? config.elevenlabs_phone_number_id,
-    };
-  } catch {
+    const apiKey = envApiKey ?? config.elevenlabs_api_key ?? null;
+    const phoneNumberId = envPhoneId ?? config.elevenlabs_phone_number_id ?? null;
+    logger.info({ hasApiKey: !!apiKey, hasPhoneId: !!phoneNumberId, source: 'config' }, 'ElevenLabs config resolved');
     return { apiKey, phoneNumberId };
+  } catch (err) {
+    logger.error({ err }, 'Failed to read ElevenLabs config from store');
+    return { apiKey: envApiKey, phoneNumberId: envPhoneId };
   }
 }
 

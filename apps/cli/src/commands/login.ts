@@ -31,6 +31,70 @@ function renderQR(qr: string): void {
 }
 
 /**
+ * Attempt a WhatsApp connection. If stale auth causes a "logged out" disconnect,
+ * clear the auth directory and retry once with a fresh session.
+ */
+async function connectWithRetry(isRetry = false): Promise<void> {
+  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const baileysLogger = pino({ level: 'silent' });
+
+  const sock = makeWASocket({
+    auth: state,
+    logger: baileysLogger as never,
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      sock.end(undefined);
+      reject(new Error('QR code scan timed out after 2 minutes'));
+    }, 120_000);
+
+    sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        console.clear();
+        console.log('Scan this QR code with WhatsApp:\n');
+        renderQR(qr);
+        console.log('\nWaiting for scan...');
+      }
+
+      if (connection === 'open') {
+        clearTimeout(timeout);
+        console.log('\nWhatsApp connected successfully!');
+        console.log('Auth state saved. The daemon will use this on next start.');
+        console.log('\nYou can now run: relay start');
+        setTimeout(() => {
+          sock.end(undefined);
+          resolve();
+        }, 2000);
+      }
+
+      if (connection === 'close') {
+        const boom = lastDisconnect?.error as Boom | undefined;
+        const statusCode = boom?.output?.statusCode ?? 0;
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          clearTimeout(timeout);
+          sock.end(undefined);
+          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+
+          if (isRetry) {
+            reject(new Error('WhatsApp rejected authentication. Please try again later.'));
+            return;
+          }
+
+          console.log('Stale session detected, clearing auth and retrying...\n');
+          connectWithRetry(true).then(resolve, reject);
+        }
+      }
+    });
+  });
+}
+
+/**
  * `relay login` - Interactive WhatsApp authentication.
  *
  * Runs in the FOREGROUND so the user can see and scan the QR code.
@@ -38,8 +102,12 @@ function renderQR(qr: string): void {
  * and the daemon can use it on next start.
  */
 export function registerLoginCommand(program: Command): void {
-  program
-    .command('whatsapp-start')
+  const whatsapp = program
+    .command('whatsapp')
+    .description('WhatsApp connection management');
+
+  whatsapp
+    .command('login')
     .description('Connect WhatsApp by scanning QR code (runs in foreground)')
     .action(async () => {
       // Ensure .relay-agent directory exists
@@ -51,9 +119,33 @@ export function registerLoginCommand(program: Command): void {
       console.log('Starting WhatsApp authentication...');
       console.log('A QR code will appear below. Scan it with your WhatsApp app.\n');
 
-      const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+      await connectWithRetry();
+    });
 
-      // Baileys v7 requires a real pino logger instance
+  whatsapp
+    .command('logout')
+    .description('Clear saved WhatsApp authentication')
+    .action(() => {
+      if (fs.existsSync(AUTH_DIR)) {
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        console.log('WhatsApp auth state cleared. Run `relay whatsapp login` to re-authenticate.');
+      } else {
+        console.log('No WhatsApp auth state found.');
+      }
+    });
+
+  whatsapp
+    .command('status')
+    .description('Check WhatsApp connection status')
+    .action(async () => {
+      if (!fs.existsSync(AUTH_DIR) || fs.readdirSync(AUTH_DIR).length === 0) {
+        console.log('Not logged in. Run `relay whatsapp login` to authenticate.');
+        return;
+      }
+
+      console.log('Auth credentials found. Checking connection...\n');
+
+      const { state } = await useMultiFileAuthState(AUTH_DIR);
       const baileysLogger = pino({ level: 'silent' });
 
       const sock = makeWASocket({
@@ -61,49 +153,43 @@ export function registerLoginCommand(program: Command): void {
         logger: baileysLogger as never,
       });
 
-      sock.ev.on('creds.update', saveCreds);
-
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
+      let resolved = false;
+      const checkTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
           sock.end(undefined);
-          reject(new Error('QR code scan timed out after 2 minutes'));
-        }, 120_000);
+          console.log('Status: Could not reach WhatsApp servers (timeout).');
+        }
+      }, 15_000);
 
-        sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
-          const { connection, lastDisconnect, qr } = update;
+      sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
+        if (resolved) return;
+        const { connection, lastDisconnect } = update;
 
-          // Handle QR code - render it ourselves since printQRInTerminal is deprecated
-          if (qr) {
-            console.clear();
-            console.log('Scan this QR code with WhatsApp:\n');
-            renderQR(qr);
-            console.log('\nWaiting for scan...');
+        if (connection === 'open') {
+          resolved = true;
+          clearTimeout(checkTimeout);
+          const user = sock.user;
+          console.log('Status: Connected');
+          if (user) {
+            console.log('Phone:  +%s', user.id.split(':')[0] ?? user.id);
+            console.log('Name:   %s', user.name ?? '(unknown)');
           }
+          sock.end(undefined);
+        }
 
-          if (connection === 'open') {
-            clearTimeout(timeout);
-            console.log('\nWhatsApp connected successfully!');
-            console.log('Auth state saved. The daemon will use this on next start.');
-            console.log('\nYou can now run: relay start');
+        if (connection === 'close') {
+          resolved = true;
+          clearTimeout(checkTimeout);
+          const boom = lastDisconnect?.error as Boom | undefined;
+          const statusCode = boom?.output?.statusCode ?? 0;
 
-            // Give it a moment to save creds then disconnect
-            setTimeout(() => {
-              sock.end(undefined);
-              resolve();
-            }, 2000);
+          if (statusCode === DisconnectReason.loggedOut) {
+            console.log('Status: Logged out (session expired). Run `relay whatsapp login`.');
+          } else {
+            console.log('Status: Disconnected (code %d). Try `relay whatsapp login`.', statusCode);
           }
-
-          if (connection === 'close') {
-            const boom = lastDisconnect?.error as Boom | undefined;
-            const statusCode = boom?.output?.statusCode ?? 0;
-
-            if (statusCode === DisconnectReason.loggedOut) {
-              clearTimeout(timeout);
-              reject(new Error('WhatsApp logged out. Please try again.'));
-            }
-            // Other close reasons during auth = QR expired, will get a new one
-          }
-        });
+        }
       });
     });
 }

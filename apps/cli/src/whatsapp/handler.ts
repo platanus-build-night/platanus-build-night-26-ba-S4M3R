@@ -82,7 +82,7 @@ async function handleIncomingMessage(
   const instance = await deps.instanceStore.getActiveForContact(phone);
 
   if (!instance) {
-    logger.debug(
+    logger.info(
       { phone },
       `No active instance for contact ${phone}, ignoring message`,
     );
@@ -97,8 +97,8 @@ async function handleIncomingMessage(
     timestamp: message.timestamp,
   });
 
-  // If instance is in WAITING_FOR_REPLY, trigger the contact_replies transition
-  if (instance.state === 'WAITING_FOR_REPLY') {
+  // Route message if instance can accept contact replies (WAITING_FOR_REPLY or ACTIVE)
+  if (instance.state === 'WAITING_FOR_REPLY' || instance.state === 'ACTIVE') {
     const result = await deps.stateMachine.transition(
       instance.id,
       'contact_replies' as StateEvent,
@@ -122,9 +122,6 @@ async function handleIncomingMessage(
           { instanceId: instance.id, error: errMsg },
           'Agent failed to process incoming message; instance remains in current state',
         );
-        // Agent error handling (NEEDS_HUMAN_INTERVENTION transition) is done
-        // inside processWithAgent/processMessage. If we reach here, the error
-        // was already handled or the instance state was already updated.
       }
 
       // Schedule a new heartbeat (agent may have sent a response, now waiting for reply)
@@ -139,7 +136,7 @@ async function handleIncomingMessage(
       );
     }
   } else {
-    // Instance exists but is in a state other than WAITING_FOR_REPLY.
+    // Instance exists but is in a state that doesn't accept contact replies.
     // Message is recorded in transcript but no state transition is triggered.
     logger.debug(
       { instanceId: instance.id, state: instance.state, phone },

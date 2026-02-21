@@ -37,6 +37,15 @@ const messageCallbacks: Array<(message: IncomingMessage) => void> = [];
 /** Reconnect timer reference for cleanup */
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * LID ↔ Phone JID mapping.
+ * Baileys v7 may report incoming messages with LID-based JIDs (@lid) instead
+ * of phone-based JIDs (@s.whatsapp.net). We build a mapping by tracking
+ * send targets and using Baileys' store when available.
+ */
+const lidToPhoneMap = new Map<string, string>();
+const phoneToLidMap = new Map<string, string>();
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -164,7 +173,15 @@ function handleMessagesUpsert(upsert: {
       continue;
     }
 
-    const senderJid = msg.key.remoteJid ?? '';
+    let senderJid = msg.key.remoteJid ?? '';
+
+    // Resolve LID-based JIDs to phone-based JIDs using our mapping
+    if (senderJid.endsWith('@lid') && lidToPhoneMap.has(senderJid)) {
+      const resolvedJid = lidToPhoneMap.get(senderJid)!;
+      logger.info({ originalJid: senderJid, resolvedJid }, 'Resolved LID to phone JID');
+      senderJid = resolvedJid;
+    }
+
     const senderPhone = jidToPhone(senderJid);
     const timestamp = msg.messageTimestamp
       ? new Date(
@@ -182,8 +199,8 @@ function handleMessagesUpsert(upsert: {
       raw: msg,
     };
 
-    logger.debug(
-      { senderPhone, textLength: text.length },
+    logger.info(
+      { senderPhone, senderJid, textLength: text.length },
       'Incoming WhatsApp message',
     );
 
@@ -269,8 +286,17 @@ export async function sendMessage(jid: string, text: string): Promise<void> {
     throw new Error('WhatsApp is not connected. Cannot send message.');
   }
 
-  await socket.sendMessage(jid, { text });
+  const result = await socket.sendMessage(jid, { text });
   logger.debug({ jid, textLength: text.length }, 'WhatsApp message sent');
+
+  // Track LID mapping: if the sent message's key has a different remoteJid (LID),
+  // map it back to the phone JID we intended
+  if (result?.key?.remoteJid && result.key.remoteJid !== jid) {
+    const lid = result.key.remoteJid;
+    lidToPhoneMap.set(lid, jid);
+    phoneToLidMap.set(jid, lid);
+    logger.info({ lid, phoneJid: jid }, 'Mapped LID to phone JID');
+  }
 }
 
 /**
@@ -329,6 +355,13 @@ function jidToPhone(jid: string): string {
 // ---------------------------------------------------------------------------
 // Message text extraction
 // ---------------------------------------------------------------------------
+
+/**
+ * Resolve a LID JID to a phone JID if a mapping exists.
+ */
+export function resolveLidToPhone(lid: string): string | null {
+  return lidToPhoneMap.get(lid) ?? null;
+}
 
 /**
  * Extract the text content from a Baileys WAMessage.

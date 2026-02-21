@@ -164,6 +164,7 @@ export const VALID_TRANSITIONS: Record<string, Record<string, InstanceState | nu
   },
   ACTIVE: {
     message_sent: 'WAITING_FOR_REPLY',
+    contact_replies: 'WAITING_FOR_AGENT',
     end_conversation: 'COMPLETED',
     request_intervention: 'NEEDS_HUMAN_INTERVENTION',
     unrecoverable_error: 'FAILED',
@@ -178,6 +179,7 @@ export const VALID_TRANSITIONS: Record<string, Record<string, InstanceState | nu
     cancel: 'FAILED',
   },
   WAITING_FOR_AGENT: {
+    message_sent: 'WAITING_FOR_REPLY',
     agent_processes_reply: 'ACTIVE',
     end_conversation: 'COMPLETED',
     pause: 'PAUSED',

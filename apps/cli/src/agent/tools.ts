@@ -235,7 +235,7 @@ function createRequestHumanInterventionTool(ctx: ToolContext): ToolDefinition {
  * Heartbeat override delay storage.
  * Keyed by instance ID. The heartbeat system (Task 3.3) will read and clear this.
  */
-const heartbeatOverrides = new Map<string, number>();
+export const heartbeatOverrides = new Map<string, number>();
 
 /**
  * Read and clear the heartbeat override for an instance.

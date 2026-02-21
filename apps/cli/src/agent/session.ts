@@ -1,16 +1,10 @@
-import { getModel } from '@mariozechner/pi-ai';
-import {
-  createAgentSession as piCreateAgentSession,
-  AuthStorage,
-  ModelRegistry,
-  SessionManager,
-  SettingsManager,
-  createExtensionRuntime,
-  type AgentSession,
-  type ResourceLoader,
-} from '@mariozechner/pi-coding-agent';
+import Anthropic from '@anthropic-ai/sdk';
+import type { MessageParam, Tool, ToolResultBlockParam } from '@anthropic-ai/sdk/resources/messages';
+import OpenAI from 'openai';
+import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
+import { AuthStorage } from '@mariozechner/pi-coding-agent';
 import type { ConversationInstance, StateEvent, TranscriptMessage } from '../types.js';
-import { createConversationTools } from './tools.js';
+import * as WhatsApp from '../whatsapp/connection.js';
 import * as InstanceStore from '../store/instances.js';
 import * as TranscriptStore from '../store/transcripts.js';
 import * as ConfigStore from '../store/config.js';
@@ -21,10 +15,6 @@ import logger from '../utils/logger.js';
 // Session Dependencies (for DI / testability)
 // ============================================
 
-/**
- * External dependencies injected into the session factory.
- * Defaults are provided for production use; override for testing.
- */
 export interface SessionDependencies {
   getInstanceById: (id: string) => Promise<ConversationInstance | null>;
   getTranscriptByInstance: (instanceId: string) => Promise<TranscriptMessage[]>;
@@ -40,19 +30,179 @@ const defaultDeps: SessionDependencies = {
 };
 
 // ============================================
-// Session Map
+// Provider abstraction
 // ============================================
 
-const sessions = new Map<string, AgentSession>();
+type Provider = 'anthropic' | 'openai';
+
+interface AgentSessionState {
+  provider: Provider;
+  anthropicClient?: Anthropic;
+  openaiClient?: OpenAI;
+  model: string;
+  systemPrompt: string;
+  // Anthropic uses its own message format; OpenAI uses ChatCompletionMessageParam
+  anthropicMessages: MessageParam[];
+  openaiMessages: ChatCompletionMessageParam[];
+  instanceId: string;
+  contactJid: string;
+}
+
+const sessions = new Map<string, AgentSessionState>();
+
+// ============================================
+// Tool Definitions (shared logic, dual format)
+// ============================================
+
+const TOOL_DEFS = [
+  {
+    name: 'send_message',
+    description: 'Send a text message to the contact via WhatsApp.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        text: { type: 'string', description: 'The text message to send to the contact' },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'mark_todo_item',
+    description: 'Update the status of a todo item. Valid statuses: pending, in_progress, completed, skipped.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        todo_id: { type: 'string', description: 'The ID of the todo item to update' },
+        status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'skipped'], description: 'The new status' },
+      },
+      required: ['todo_id', 'status'],
+    },
+  },
+  {
+    name: 'end_conversation',
+    description: 'Mark the conversation as completed.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        reason: { type: 'string', description: 'The reason for ending the conversation' },
+      },
+      required: ['reason'],
+    },
+  },
+  {
+    name: 'request_human_intervention',
+    description: 'Flag the conversation for human review.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        reason: { type: 'string', description: 'The reason human intervention is needed' },
+      },
+      required: ['reason'],
+    },
+  },
+  {
+    name: 'schedule_next_heartbeat',
+    description: 'Override the delay before the next heartbeat fires.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        delay_ms: { type: 'number', description: 'Delay in milliseconds before the next heartbeat' },
+      },
+      required: ['delay_ms'],
+    },
+  },
+];
+
+// Anthropic format
+const ANTHROPIC_TOOLS: Tool[] = TOOL_DEFS.map((t) => ({
+  name: t.name,
+  description: t.description,
+  input_schema: t.parameters,
+}));
+
+// OpenAI format
+const OPENAI_TOOLS: ChatCompletionTool[] = TOOL_DEFS.map((t) => ({
+  type: 'function' as const,
+  function: {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+  },
+}));
+
+// ============================================
+// Tool Executor
+// ============================================
+
+async function executeTool(
+  toolName: string,
+  input: Record<string, unknown>,
+  instanceId: string,
+  contactJid: string,
+): Promise<string> {
+  switch (toolName) {
+    case 'send_message': {
+      const text = input.text as string;
+      await WhatsApp.sendMessage(contactJid, text);
+      await TranscriptStore.append({
+        instance_id: instanceId,
+        role: 'agent',
+        content: text,
+        timestamp: new Date().toISOString(),
+      });
+      const result = await transition(instanceId, 'message_sent');
+      if (!result.success) {
+        logger.warn({ instanceId, error: result.error }, 'State transition failed after send_message');
+      }
+      logger.info({ instanceId, textLength: text.length }, 'Agent sent message via WhatsApp');
+      return JSON.stringify({ success: true });
+    }
+
+    case 'mark_todo_item': {
+      const { todo_id, status } = input as { todo_id: string; status: string };
+      const instance = await InstanceStore.getById(instanceId);
+      if (!instance) return JSON.stringify({ success: false, error: 'Instance not found' });
+      const todo = instance.todos.find((t) => t.id === todo_id);
+      if (!todo) return JSON.stringify({ success: false, error: `Todo not found: ${todo_id}` });
+      todo.status = status as 'pending' | 'in_progress' | 'completed' | 'skipped';
+      await InstanceStore.update(instanceId, { todos: instance.todos });
+      logger.info({ instanceId, todo_id, status }, 'Todo item updated');
+      return JSON.stringify({ success: true, todo_id, new_status: status });
+    }
+
+    case 'end_conversation': {
+      const reason = input.reason as string;
+      const result = await transition(instanceId, 'end_conversation');
+      if (!result.success) return JSON.stringify({ success: false, error: result.error });
+      logger.info({ instanceId, reason }, 'Conversation ended');
+      return JSON.stringify({ success: true, reason });
+    }
+
+    case 'request_human_intervention': {
+      const reason = input.reason as string;
+      const result = await transition(instanceId, 'request_intervention');
+      if (!result.success) return JSON.stringify({ success: false, error: result.error });
+      logger.info({ instanceId, reason }, 'Human intervention requested');
+      return JSON.stringify({ success: true, reason });
+    }
+
+    case 'schedule_next_heartbeat': {
+      const delay_ms = input.delay_ms as number;
+      const { heartbeatOverrides } = await import('./tools.js');
+      heartbeatOverrides.set(instanceId, delay_ms);
+      logger.info({ instanceId, delay_ms }, 'Heartbeat override scheduled');
+      return JSON.stringify({ success: true, delay_ms });
+    }
+
+    default:
+      return JSON.stringify({ success: false, error: `Unknown tool: ${toolName}` });
+  }
+}
 
 // ============================================
 // System Prompt Builder
 // ============================================
 
-/**
- * Builds the agent system prompt from the conversation instance context.
- * Includes the objective, todo list with statuses, and behavioral rules.
- */
 export function buildSystemPrompt(instance: ConversationInstance): string {
   const todosFormatted = instance.todos
     .map((todo) => `- [${todo.status}] ${todo.text} (id: ${todo.id})`)
@@ -69,311 +219,337 @@ RULES:
 - Only discuss topics related to the objective
 - Never reveal you are an AI agent unless asked directly
 - Be professional and concise
-- Use the provided tools to manage the conversation
 - Use send_message to send messages to the contact
 - Use mark_todo_item to update todo statuses when information is gathered
-- Mark todo items as completed when the information is gathered
 - Use end_conversation when all todos are complete or the objective is fulfilled
 - If you cannot proceed, use request_human_intervention
-- Do NOT use any filesystem, code execution, or shell tools -- you only have conversation tools`;
+- Always call send_message to communicate — do NOT just produce text output`;
 }
 
-// ============================================
-// Message Builder
-// ============================================
-
-/**
- * Converts transcript messages into a single context string for the agent.
- * The agent receives this as part of a prompt, not as separate LLM messages,
- * because pi-mono manages its own message history internally.
- */
 export function buildTranscriptContext(transcript: TranscriptMessage[]): string {
-  if (transcript.length === 0) {
-    return '';
-  }
-
+  if (transcript.length === 0) return '';
   const lines = transcript.map((msg) => {
     const roleLabel = msg.role === 'agent' ? 'You' : msg.role === 'contact' ? 'Contact' : msg.role;
     return `[${roleLabel}]: ${msg.content}`;
   });
-
   return `\nCONVERSATION HISTORY:\n${lines.join('\n')}`;
+}
+
+// ============================================
+// Provider + API Key Resolution
+// ============================================
+
+interface ResolvedConfig {
+  provider: Provider;
+  apiKey?: string;
+  authToken?: string;  // OAuth token (Claude/Codex subscription)
+  model: string;
+  authSource: string;  // For logging
+}
+
+// ============================================
+// OAuth via pi-mono AuthStorage (handles refresh + locking)
+// ============================================
+
+let _authStorage: ReturnType<typeof AuthStorage.create> | null = null;
+function getAuthStorage() {
+  if (!_authStorage) _authStorage = AuthStorage.create();
+  return _authStorage;
+}
+
+// ============================================
+// Config Resolution (priority chain)
+// ============================================
+
+async function resolveConfig(config: { model_api_key: string | null; model_provider: string | null }): Promise<ResolvedConfig> {
+  const provider = (config.model_provider ?? 'anthropic') as Provider;
+
+  // 1. Explicit API key from relay init
+  if (config.model_api_key) {
+    if (provider === 'openai') {
+      return { provider: 'openai', apiKey: config.model_api_key, model: 'gpt-4o', authSource: 'relay init (openai)' };
+    }
+    return { provider: 'anthropic', apiKey: config.model_api_key, model: 'claude-sonnet-4-20250514', authSource: 'relay init (anthropic)' };
+  }
+
+  // 2. Environment variables
+  if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+    return { provider: 'openai', apiKey: process.env.OPENAI_API_KEY, model: 'gpt-4o', authSource: 'OPENAI_API_KEY env' };
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    return { provider: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY, model: 'claude-sonnet-4-20250514', authSource: 'ANTHROPIC_API_KEY env' };
+  }
+
+  // 3. Claude subscription (OAuth via pi-mono AuthStorage - auto-refreshes)
+  const auth = getAuthStorage();
+  const anthropicKey = await auth.getApiKey('anthropic');
+  if (anthropicKey) {
+    // OAuth tokens start with sk-ant-oat, API keys start with sk-ant-api
+    const isOAuth = anthropicKey.startsWith('sk-ant-oat');
+    return {
+      provider: 'anthropic',
+      ...(isOAuth ? { authToken: anthropicKey } : { apiKey: anthropicKey }),
+      model: 'claude-sonnet-4-20250514',
+      authSource: isOAuth ? 'Claude subscription (OAuth)' : 'Anthropic API key (auth.json)',
+    };
+  }
+
+  // 4. Codex subscription (OAuth via pi-mono AuthStorage)
+  const codexKey = await auth.getApiKey('openai-codex');
+  if (codexKey) {
+    return { provider: 'openai', apiKey: codexKey, model: 'gpt-4o', authSource: 'Codex subscription (OAuth)' };
+  }
+
+  throw new Error(
+    'No API key or subscription found. Options:\n' +
+    '  1. relay init --api-key KEY --provider anthropic\n' +
+    '  2. Set ANTHROPIC_API_KEY or OPENAI_API_KEY env var\n' +
+    '  3. Login to Claude Code (pi login) for subscription access\n' +
+    '  4. Login to Codex (pi login) for ChatGPT subscription access',
+  );
 }
 
 // ============================================
 // Session Factory
 // ============================================
 
-/**
- * Resolves the pi-ai model identifier from the config provider string.
- * Maps config values like "anthropic" or "openai" to a concrete model.
- */
-function resolveModel(provider: string | null, apiKey: string | null) {
-  const resolvedProvider = provider ?? 'anthropic';
-
-  if (resolvedProvider === 'anthropic') {
-    return getModel('anthropic', 'claude-sonnet-4-20250514');
-  }
-
-  if (resolvedProvider === 'openai') {
-    return getModel('openai', 'gpt-4o');
-  }
-
-  // Fallback to anthropic for unknown providers
-  logger.warn({ provider: resolvedProvider }, 'Unknown model provider, falling back to anthropic');
-  return getModel('anthropic', 'claude-sonnet-4-20250514');
-}
-
-/**
- * Creates a pi-mono agent session for the given conversation instance.
- *
- * The session is scoped to the instance: it receives only conversation tools
- * (no filesystem/code tools), and its system prompt includes the objective,
- * todo list, and transcript history.
- */
 export async function createSession(
   instance: ConversationInstance,
   deps: SessionDependencies = defaultDeps,
-): Promise<AgentSession> {
+): Promise<AgentSessionState> {
   const config = await deps.getConfig();
   const transcript = await deps.getTranscriptByInstance(instance.id);
 
   const systemPrompt = buildSystemPrompt(instance);
   const transcriptContext = buildTranscriptContext(transcript);
-  const fullPrompt = transcriptContext
-    ? `${systemPrompt}\n${transcriptContext}`
-    : systemPrompt;
+  const fullPrompt = transcriptContext ? `${systemPrompt}\n${transcriptContext}` : systemPrompt;
 
-  // Build conversation-scoped tools (no fs/code/bash tools)
+  const resolved = await resolveConfig(config);
   const contactJid = `${instance.target_contact.replace('+', '')}@s.whatsapp.net`;
-  const conversationTools = createConversationTools({
+
+  const state: AgentSessionState = {
+    provider: resolved.provider,
+    model: resolved.model,
+    systemPrompt: fullPrompt,
+    anthropicMessages: [],
+    openaiMessages: [],
     instanceId: instance.id,
     contactJid,
-  });
-
-  // Configure auth: pi-mono reads API keys from environment variables.
-  // Set them before creating the session so the SDK picks them up.
-  const resolvedProvider = config.model_provider ?? 'anthropic';
-  if (config.model_api_key) {
-    if (resolvedProvider === 'anthropic') {
-      process.env.ANTHROPIC_API_KEY = config.model_api_key;
-    } else if (resolvedProvider === 'openai') {
-      process.env.OPENAI_API_KEY = config.model_api_key;
-    }
-  }
-
-  const authStorage = AuthStorage.create('/tmp/relay-agent/auth.json');
-
-  const modelRegistry = new ModelRegistry(authStorage);
-  const model = resolveModel(config.model_provider, config.model_api_key);
-
-  // Minimal resource loader with our custom system prompt (no default coding prompts)
-  const resourceLoader: ResourceLoader = {
-    getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
-    getSkills: () => ({ skills: [], diagnostics: [] }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => fullPrompt,
-    getAppendSystemPrompt: () => [],
-    getPathMetadata: () => new Map(),
-    extendResources: () => {},
-    reload: async () => {},
   };
 
-  const settingsManager = SettingsManager.inMemory({
-    compaction: { enabled: false },
-    retry: { enabled: true, maxRetries: 2 },
-  });
+  if (resolved.provider === 'anthropic') {
+    if (resolved.authToken) {
+      // OAuth subscription: requires special beta headers
+      state.anthropicClient = new Anthropic({
+        apiKey: null as unknown as string,
+        authToken: resolved.authToken,
+        defaultHeaders: {
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20',
+          'user-agent': 'relay-agent/0.1.0',
+        },
+      });
+    } else {
+      state.anthropicClient = new Anthropic({ apiKey: resolved.apiKey! });
+    }
+  } else {
+    state.openaiClient = new OpenAI({ apiKey: resolved.authToken ?? resolved.apiKey! });
+  }
 
-  const { session } = await piCreateAgentSession({
-    model,
-    authStorage,
-    modelRegistry,
-    resourceLoader,
-    tools: [], // No built-in coding tools
-    customTools: conversationTools,
-    sessionManager: SessionManager.inMemory(),
-    settingsManager,
-    thinkingLevel: 'off',
-  });
+  logger.info({ authSource: resolved.authSource }, 'Using auth source');
 
-  sessions.set(instance.id, session);
+  sessions.set(instance.id, state);
 
   logger.info(
-    { instanceId: instance.id, toolCount: conversationTools.length },
+    { instanceId: instance.id, provider: resolved.provider, model: resolved.model, promptLength: fullPrompt.length },
     'Agent session created',
   );
 
-  return session;
+  return state;
+}
+
+// ============================================
+// Anthropic agentic loop
+// ============================================
+
+async function runAnthropicLoop(state: AgentSessionState): Promise<void> {
+  const client = state.anthropicClient!;
+  const MAX_ROUNDS = 10;
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const response = await client.messages.create({
+      model: state.model,
+      max_tokens: 1024,
+      system: state.systemPrompt,
+      tools: ANTHROPIC_TOOLS,
+      messages: state.anthropicMessages,
+    });
+
+    logger.info(
+      { instanceId: state.instanceId, round, stopReason: response.stop_reason },
+      'Anthropic API response',
+    );
+
+    state.anthropicMessages.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason !== 'tool_use') break;
+
+    const toolResults: ToolResultBlockParam[] = [];
+    for (const block of response.content) {
+      if (block.type === 'tool_use') {
+        logger.info({ instanceId: state.instanceId, tool: block.name, input: block.input }, 'Executing tool');
+        const result = await executeTool(block.name, block.input as Record<string, unknown>, state.instanceId, state.contactJid);
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+      }
+    }
+
+    state.anthropicMessages.push({ role: 'user', content: toolResults });
+  }
+}
+
+// ============================================
+// OpenAI agentic loop
+// ============================================
+
+async function runOpenAILoop(state: AgentSessionState): Promise<void> {
+  const client = state.openaiClient!;
+  const MAX_ROUNDS = 10;
+
+  // Ensure system message is first
+  if (state.openaiMessages.length === 0 || state.openaiMessages[0].role !== 'system') {
+    state.openaiMessages.unshift({ role: 'system', content: state.systemPrompt });
+  }
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const response = await client.chat.completions.create({
+      model: state.model,
+      max_tokens: 1024,
+      tools: OPENAI_TOOLS,
+      messages: state.openaiMessages,
+    });
+
+    const choice = response.choices[0];
+    if (!choice) break;
+
+    logger.info(
+      { instanceId: state.instanceId, round, finishReason: choice.finish_reason },
+      'OpenAI API response',
+    );
+
+    state.openaiMessages.push(choice.message);
+
+    if (choice.finish_reason !== 'tool_calls' || !choice.message.tool_calls?.length) break;
+
+    for (const toolCall of choice.message.tool_calls) {
+      if (toolCall.type !== 'function') continue;
+      const fn = toolCall.function;
+      const args = JSON.parse(fn.arguments);
+      logger.info({ instanceId: state.instanceId, tool: fn.name, input: args }, 'Executing tool');
+      const result = await executeTool(fn.name, args, state.instanceId, state.contactJid);
+      state.openaiMessages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: result,
+      });
+    }
+  }
 }
 
 // ============================================
 // Message Processing
 // ============================================
 
-/**
- * Processes an incoming message through the agent session.
- *
- * Retrieves (or creates) the session for the given instance, feeds the
- * incoming message to the agent via `session.prompt()`, and triggers
- * the `agent_processes_reply` state transition afterward.
- */
+const MAX_TOOL_ROUNDS = 10;
+
 export async function processMessage(
   instanceId: string,
   message: string,
   deps: SessionDependencies = defaultDeps,
 ): Promise<void> {
-  let session = sessions.get(instanceId);
+  let state = sessions.get(instanceId);
 
-  if (!session) {
+  if (!state) {
     const instance = await deps.getInstanceById(instanceId);
-    if (!instance) {
-      throw new Error(`Instance not found: ${instanceId}`);
-    }
-    session = await createSession(instance, deps);
+    if (!instance) throw new Error(`Instance not found: ${instanceId}`);
+    state = await createSession(instance, deps);
   }
 
-  logger.debug(
-    { instanceId, messageLength: message.length },
-    'Processing message through agent session',
-  );
+  logger.info({ instanceId, provider: state.provider, message: message.substring(0, 100) }, 'Processing message');
 
-  // Feed the message to the pi-mono agent. It will invoke tools as needed
-  // (send_message, mark_todo_item, etc.) internally.
+  const startTime = Date.now();
+
   try {
-    await session.prompt(`Contact says: ${message}`);
+    if (state.provider === 'anthropic') {
+      state.anthropicMessages.push({ role: 'user', content: message });
+      await runAnthropicLoop(state);
+    } else {
+      state.openaiMessages.push({ role: 'user', content: message });
+      await runOpenAILoop(state);
+    }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'Unknown error';
-    const isTimeout = errMsg.toLowerCase().includes('timeout') || errMsg.toLowerCase().includes('timed out');
-    const isRateLimit = errMsg.toLowerCase().includes('rate limit') || errMsg.toLowerCase().includes('429');
-    const isAuthFailure = errMsg.toLowerCase().includes('401') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('invalid api key');
+    logger.error({ instanceId, error: errMsg }, 'LLM API error');
 
-    if (isTimeout) {
-      logger.warn({ instanceId, error: errMsg }, 'Agent LLM timeout, retrying once');
-      try {
-        await session.prompt(`Contact says: ${message}`);
-      } catch (retryErr) {
-        const retryMsg = retryErr instanceof Error ? retryErr.message : 'Unknown error';
-        logger.error({ instanceId, error: retryMsg }, 'Agent LLM retry failed, requesting human intervention');
-        await deps.transition(instanceId, 'request_intervention');
-        return;
-      }
-    } else if (isRateLimit) {
-      logger.error({ instanceId, error: errMsg }, 'Agent LLM rate limited, requesting human intervention');
+    if (errMsg.includes('401') || errMsg.includes('authentication') || errMsg.includes('invalid')) {
       await deps.transition(instanceId, 'request_intervention');
-      return;
-    } else if (isAuthFailure) {
-      logger.error({ instanceId, error: errMsg }, 'Agent LLM auth failure, requesting human intervention');
+    } else if (errMsg.includes('429') || errMsg.includes('rate')) {
       await deps.transition(instanceId, 'request_intervention');
-      return;
     } else {
-      logger.error({ instanceId, error: errMsg }, 'Agent LLM unrecoverable error');
       const failResult = await deps.transition(instanceId, 'unrecoverable_error');
       if (!failResult.success) {
-        // If unrecoverable_error transition is not valid from current state, try request_intervention
         await deps.transition(instanceId, 'request_intervention');
       }
-      return;
+    }
+    return;
+  }
+
+  // Only trigger agent_processes_reply if in WAITING_FOR_AGENT state
+  const currentInstance = await deps.getInstanceById(instanceId);
+  if (currentInstance?.state === 'WAITING_FOR_AGENT') {
+    const result = await deps.transition(instanceId, 'agent_processes_reply');
+    if (!result.success) {
+      logger.warn({ instanceId, error: result.error }, 'State transition failed after agent processed reply');
     }
   }
 
-  // Trigger state transition: agent has processed the reply
-  const result = await deps.transition(instanceId, 'agent_processes_reply');
-  if (!result.success) {
-    logger.warn(
-      { instanceId, error: result.error },
-      'State transition failed after agent processed reply',
-    );
-  }
-
-  logger.debug({ instanceId }, 'Agent finished processing message');
+  const elapsed = Date.now() - startTime;
+  logger.info({ instanceId, elapsedMs: elapsed }, 'Agent finished processing message');
 }
 
 // ============================================
 // Session Lifecycle
 // ============================================
 
-/**
- * Destroys the agent session for the given instance, releasing resources.
- */
 export function destroySession(instanceId: string): void {
-  const session = sessions.get(instanceId);
-  if (session) {
-    sessions.delete(instanceId);
+  if (sessions.delete(instanceId)) {
     logger.info({ instanceId }, 'Agent session destroyed');
   }
 }
 
-/**
- * Returns whether an active session exists for the given instance.
- */
 export function hasSession(instanceId: string): boolean {
   return sessions.has(instanceId);
 }
 
-/**
- * Returns the number of active agent sessions.
- */
 export function getSessionCount(): number {
   return sessions.size;
 }
 
-/**
- * Destroys all active agent sessions. Used during daemon shutdown.
- */
 export function destroyAllSessions(): void {
   const count = sessions.size;
-  for (const instanceId of sessions.keys()) {
-    logger.info({ instanceId }, 'Agent session destroyed (shutdown)');
-  }
   sessions.clear();
   logger.info({ count }, `Destroyed ${count} agent sessions during shutdown`);
 }
 
-// ============================================
-// Session Reconstruction (daemon restart)
-// ============================================
-
-/**
- * Reconstructs a session from a previous instance and its full transcript.
- *
- * Used after daemon restart to rebuild agent context. The transcript is
- * injected into the system prompt so the agent has full conversation history.
- *
- * Note: This is a best-effort reconstruction. The pi-mono session itself
- * is new, but the system prompt contains the full transcript for context.
- */
 export async function reconstructSession(
   instance: ConversationInstance,
   transcript: TranscriptMessage[],
   deps: SessionDependencies = defaultDeps,
-): Promise<AgentSession> {
-  // Destroy any existing session first
+): Promise<AgentSessionState> {
   destroySession(instance.id);
-
-  logger.info(
-    { instanceId: instance.id, transcriptLength: transcript.length },
-    'Reconstructing agent session from transcript',
-  );
-
-  // createSession already loads transcript from the store, but for
-  // reconstruction we may want to pass explicit transcript. Since
-  // createSession reads from store (which should have the data),
-  // this works correctly.
+  logger.info({ instanceId: instance.id, transcriptLength: transcript.length }, 'Reconstructing agent session');
   return createSession(instance, deps);
 }
 
-// ============================================
-// Export for processWithAgent (task requirement)
-// ============================================
-
-/**
- * Main entry point: processes an incoming contact message through the agent.
- *
- * Loads the instance, feeds the message to the pi-mono agent session,
- * executes resulting tool calls, and triggers the appropriate state transition.
- */
 export async function processWithAgent(
   instanceId: string,
   message: string,

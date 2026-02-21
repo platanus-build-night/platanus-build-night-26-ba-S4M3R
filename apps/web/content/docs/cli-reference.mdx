@@ -11,23 +11,34 @@ All commands communicate with the relay daemon via HTTP on `localhost:3214`.
 
 ### `relay init`
 
-Initialize WhatsApp authentication. Displays a QR code for scanning.
+Initialize relay configuration. Sets the model API key and provider used for agent sessions. If flags are omitted, the command prompts interactively.
 
 ```bash
 relay init
+relay init --api-key sk-ant-... --provider anthropic
+relay init --api-key sk-... --provider openai
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--api-key <key>` | Model API key (Anthropic or OpenAI) |
+| `--provider <provider>` | Model provider: `anthropic` or `openai` |
+
+The daemon must be running before calling `relay init`. Configuration is saved to `.relay-agent/config.json`.
 
 ### `relay start`
 
-Launch the persistent background daemon.
+Launch the persistent background daemon. Spawns a detached process and waits up to 10 seconds for it to become healthy.
 
 ```bash
 relay start
 ```
 
+The daemon listens on `localhost:3214` and maintains the WhatsApp connection. All other CLI commands communicate with this daemon.
+
 ### `relay stop`
 
-Gracefully terminate the daemon. All state is flushed to disk.
+Gracefully terminate the daemon. Sends SIGTERM and waits up to 5 seconds for shutdown. All state is flushed to disk.
 
 ```bash
 relay stop
@@ -39,10 +50,51 @@ Check daemon health and connection state.
 
 ```bash
 relay status
-relay status --json  # machine-parseable output
+relay status --json
 ```
 
-Returns: daemon PID, uptime, WhatsApp connection state, active instance count.
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as machine-parseable JSON |
+
+Returns: daemon PID, uptime, WhatsApp connection state, active instance count, total instance count.
+
+## WhatsApp Management
+
+### `relay whatsapp login`
+
+Connect WhatsApp by scanning a QR code. Runs in the foreground (not through the daemon) so you can see the QR code in your terminal.
+
+```bash
+relay whatsapp login
+```
+
+- Displays a QR code — scan it with your WhatsApp app
+- Auth state is saved to `.relay-agent/whatsapp-auth/`
+- Times out after 2 minutes if no scan
+- Automatically retries once if a stale session is detected
+
+After successful login, run `relay start` to launch the daemon with the saved credentials.
+
+### `relay whatsapp logout`
+
+Clear saved WhatsApp authentication. Deletes the `.relay-agent/whatsapp-auth/` directory.
+
+```bash
+relay whatsapp logout
+```
+
+After logging out, you must run `relay whatsapp login` again before starting the daemon.
+
+### `relay whatsapp status`
+
+Check WhatsApp connection status without starting the daemon.
+
+```bash
+relay whatsapp status
+```
+
+Returns: connection state, phone number, and account name if connected. Times out after 15 seconds.
 
 ## Conversation Management
 
@@ -54,36 +106,50 @@ Create a new conversation instance.
 relay create \
   --contact="+56912345678" \
   --objective="confirm delivery time" \
-  --todo="ask ETA,confirm address" \
-  --heartbeat=30m \
+  --todos="ask ETA,confirm address" \
+  --heartbeat-interval=1800000 \
   --max-followups=5
 ```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--objective <text>` | Yes | Conversation objective |
+| `--contact <phone>` | Yes | Target contact phone number (international format) |
+| `--todos <items>` | Yes | Comma-separated list of todo items |
+| `--heartbeat-interval <ms>` | No | Heartbeat interval in milliseconds (default: 1800000 / 30 min) |
+| `--max-followups <n>` | No | Maximum number of follow-up attempts (default: 5) |
 
 Returns a unique instance ID. If another instance for the same contact is already active, the new instance enters `QUEUED` state.
 
 ### `relay list`
 
-List all instances with their current state.
+List all instances with their current state, contact, and objective.
 
 ```bash
 relay list
 ```
+
+Output is a formatted table with columns: ID, State, Contact, Objective.
 
 ### `relay get <id>`
 
 Get detailed state for a specific instance.
 
 ```bash
-relay get cnv_7f3a
+relay get <instance-id>
 ```
+
+Output includes: ID, state, objective, contact, follow-up count, created/updated timestamps, previous state (if paused), failure reason (if failed), heartbeat config, and todo list with status icons.
 
 ### `relay transcript <id>`
 
-Display the full message history with timestamps and sender info.
+Display the full message history with timestamps, sender roles, and content.
 
 ```bash
-relay transcript cnv_7f3a
+relay transcript <instance-id>
 ```
+
+Roles shown: Agent, Contact, System, Manual.
 
 ## Instance Control
 
@@ -92,15 +158,15 @@ relay transcript cnv_7f3a
 Suspend an active instance. Heartbeats are paused and incoming messages are not processed.
 
 ```bash
-relay pause cnv_7f3a
+relay pause <instance-id>
 ```
 
 ### `relay resume <id>`
 
-Resume a paused instance. Returns to the state it was in before pausing. Also works for instances in `NEEDS_HUMAN_INTERVENTION` state.
+Resume a paused instance. Returns to the state it was in before pausing. Also works for instances in `NEEDS_HUMAN_INTERVENTION` state (transitions to `ACTIVE`).
 
 ```bash
-relay resume cnv_7f3a
+relay resume <instance-id>
 ```
 
 ### `relay cancel <id>`
@@ -108,7 +174,7 @@ relay resume cnv_7f3a
 Cancel an instance. Transitions to `FAILED` with reason "cancelled". No farewell message is sent.
 
 ```bash
-relay cancel cnv_7f3a
+relay cancel <instance-id>
 ```
 
 ### `relay send <id> <message>`
@@ -116,7 +182,38 @@ relay cancel cnv_7f3a
 Inject a message as the agent into an active conversation.
 
 ```bash
-relay send cnv_7f3a "Sorry for the delay, checking now"
+relay send <instance-id> "Sorry for the delay, checking now"
 ```
 
 Also transitions `NEEDS_HUMAN_INTERVENTION` instances back to `ACTIVE`.
+
+## Authentication Priority
+
+relay resolves API credentials in this order:
+
+1. **`relay init`** — API key and provider saved via the init command
+2. **Environment variables** — `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
+3. **Claude subscription** — OAuth token from Claude Code login (auto-refreshes)
+4. **Codex subscription** — OAuth token from Codex login
+
+If no credentials are found, the daemon logs an error when attempting to create an agent session.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key (used if no key set via `relay init`) |
+| `OPENAI_API_KEY` | OpenAI API key (used with `--provider openai`) |
+
+## Data Directory
+
+relay stores all state in `.relay-agent/` relative to your working directory:
+
+```
+.relay-agent/
+├── config.json          # API key, provider, daemon port
+├── db.json              # Instance and transcript data (lowdb)
+├── whatsapp-auth/       # Baileys v7 authentication state
+├── logs/                # Daemon log files (pino)
+└── daemon.pid           # PID file for the running daemon
+```

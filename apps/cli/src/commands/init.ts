@@ -42,11 +42,8 @@ export function registerInitCommand(program: Command): void {
           handleHttpError(res.status, res.data, 'Failed to initialize');
         }
 
-        const data = res.data as { whatsapp_qr_displayed?: boolean };
         console.log('Configuration saved.');
-        if (data.whatsapp_qr_displayed) {
-          console.log('Scan the QR code displayed in the daemon to connect WhatsApp.');
-        }
+        console.log('Run `relay-agent whatsapp login` to connect your WhatsApp account.');
       } catch (err) {
         handleDaemonError(err);
       }

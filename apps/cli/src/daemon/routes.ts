@@ -94,13 +94,19 @@ export function setServerStartTime(time: number): void {
  * The QR code is printed directly in the daemon's terminal by Baileys.
  */
 async function handleInit(body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
-  const { model_api_key, model_provider } = body;
+  const { model_api_key, model_provider, identity_file, soul_file } = body;
 
   if (typeof model_api_key === 'string') {
     await ConfigStore.updateConfig({ model_api_key });
   }
   if (typeof model_provider === 'string') {
     await ConfigStore.updateConfig({ model_provider });
+  }
+  if (typeof identity_file === 'string') {
+    await ConfigStore.updateConfig({ identity_file });
+  }
+  if (typeof soul_file === 'string') {
+    await ConfigStore.updateConfig({ soul_file });
   }
 
   // Trigger WhatsApp connection/reconnection
@@ -112,6 +118,15 @@ async function handleInit(body: Record<string, unknown>, res: http.ServerRespons
     logger.error({ error: message }, 'Failed to initiate WhatsApp connection');
     sendJson(res, 200, { whatsapp_qr_displayed: false, error: message });
   }
+}
+
+/**
+ * GET /config
+ * Return current relay configuration including file paths.
+ */
+async function handleGetConfig(res: http.ServerResponse): Promise<void> {
+  const config = await ConfigStore.getConfig();
+  sendJson(res, 200, { config });
 }
 
 /**
@@ -426,6 +441,12 @@ export async function handleRequest(
     // POST /init
     if (method === 'POST' && route.base === 'init' && !route.id) {
       await handleInit(body, res);
+      return;
+    }
+
+    // GET /config
+    if (method === 'GET' && route.base === 'config' && !route.id) {
+      await handleGetConfig(res);
       return;
     }
 

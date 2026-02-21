@@ -5,6 +5,12 @@ import type { Low } from 'lowdb';
 import type { RelayConfig, ConversationInstance, TranscriptMessage } from '../types.js';
 
 // ============================================
+// Store Directory (exported for other modules)
+// ============================================
+
+export const STORE_DIR = path.resolve('.relay-agent');
+
+// ============================================
 // Database Schema Types
 // ============================================
 
@@ -30,6 +36,8 @@ const DEFAULT_CONFIG: ConfigData = {
     model_provider: null,
     whatsapp_connected: false,
     daemon_port: 3214,
+    identity_file: path.join(STORE_DIR, 'IDENTITY.md'),
+    soul_file: path.join(STORE_DIR, 'SOUL.md'),
   },
 };
 
@@ -42,10 +50,30 @@ const DEFAULT_TRANSCRIPTS: TranscriptsData = {
 };
 
 // ============================================
-// Store Directory
+// Default Identity & Soul Files
 // ============================================
 
-const STORE_DIR = path.resolve('.relay-agent');
+const DEFAULT_IDENTITY = `# IDENTITY.md — Who Am I?
+
+N/A
+`;
+
+const DEFAULT_SOUL = `# SOUL.md — How I Operate
+
+N/A
+`;
+
+function ensureDefaultFiles(): void {
+  const identityPath = path.join(STORE_DIR, 'IDENTITY.md');
+  const soulPath = path.join(STORE_DIR, 'SOUL.md');
+
+  if (!fs.existsSync(identityPath)) {
+    fs.writeFileSync(identityPath, DEFAULT_IDENTITY, 'utf-8');
+  }
+  if (!fs.existsSync(soulPath)) {
+    fs.writeFileSync(soulPath, DEFAULT_SOUL, 'utf-8');
+  }
+}
 
 function ensureStoreDir(): void {
   fs.mkdirSync(STORE_DIR, { recursive: true });
@@ -98,6 +126,7 @@ export function getTranscriptsDb(): Low<TranscriptsData> {
  */
 export async function initStores(): Promise<void> {
   ensureStoreDir();
+  ensureDefaultFiles();
 
   configDb = await JSONFilePreset<ConfigData>(
     path.join(STORE_DIR, 'config.json'),

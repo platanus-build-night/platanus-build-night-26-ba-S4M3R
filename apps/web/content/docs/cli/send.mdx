@@ -1,0 +1,14 @@
+---
+title: relay send
+description: Inject a message as the agent into an active conversation.
+---
+
+# relay send
+
+Inject a message as the agent into an active conversation.
+
+```bash
+relay send <instance-id> "Sorry for the delay, checking now"
+```
+
+Also transitions `NEEDS_HUMAN_INTERVENTION` instances back to `ACTIVE`.

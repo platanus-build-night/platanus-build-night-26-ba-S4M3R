@@ -1,0 +1,29 @@
+---
+title: relay create
+description: Create a new conversation instance.
+---
+
+# relay create
+
+Create a new conversation instance.
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time" \
+  --todos="ask ETA,confirm address" \
+  --heartbeat-interval=1800000 \
+  --max-followups=5
+```
+
+## Flags
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--objective <text>` | Yes | Conversation objective |
+| `--contact <phone>` | Yes | Target contact phone number (international format) |
+| `--todos <items>` | Yes | Comma-separated list of todo items |
+| `--heartbeat-interval <ms>` | No | Heartbeat interval in milliseconds (default: 1800000 / 30 min) |
+| `--max-followups <n>` | No | Maximum number of follow-up attempts (default: 5) |
+
+Returns a unique instance ID. If another instance for the same contact is already active, the new instance enters `QUEUED` state.

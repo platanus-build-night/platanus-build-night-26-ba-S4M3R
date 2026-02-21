@@ -1,0 +1,14 @@
+---
+title: relay start
+description: Launch the persistent background daemon.
+---
+
+# relay start
+
+Launch the persistent background daemon. Spawns a detached process and waits up to 10 seconds for it to become healthy.
+
+```bash
+relay start
+```
+
+The daemon listens on `localhost:3214` and maintains the WhatsApp connection. All other CLI commands communicate with this daemon.

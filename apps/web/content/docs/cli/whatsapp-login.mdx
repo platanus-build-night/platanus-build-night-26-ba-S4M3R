@@ -1,0 +1,26 @@
+---
+title: relay whatsapp login
+description: Connect WhatsApp by scanning a QR code.
+---
+
+# relay whatsapp login
+
+Connect WhatsApp by scanning a QR code. Runs in the foreground (not through the daemon) so you can see the QR code in your terminal.
+
+```bash
+relay whatsapp login
+relay whatsapp login --browser
+```
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--browser` | Render the QR code in the browser instead of the terminal |
+
+- Displays a QR code — scan it with your WhatsApp app
+- Auth state is saved to `.relay-agent/whatsapp-auth/`
+- Times out after 2 minutes if no scan
+- Automatically retries once if a stale session is detected
+
+After successful login, run `relay start` to launch the daemon with the saved credentials.

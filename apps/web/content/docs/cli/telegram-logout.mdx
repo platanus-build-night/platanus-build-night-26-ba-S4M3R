@@ -1,0 +1,21 @@
+---
+title: relay telegram logout
+description: Clear the saved Telegram bot token.
+---
+
+# relay telegram logout
+
+Clear the saved Telegram bot token and disconnect the bot.
+
+```bash
+relay telegram logout
+```
+
+## Flags
+
+None.
+
+## Notes
+
+- Removes the `.relay-agent/telegram-auth/` directory and all saved credentials.
+- After logout, run `relay telegram login` to reconnect with a new token.

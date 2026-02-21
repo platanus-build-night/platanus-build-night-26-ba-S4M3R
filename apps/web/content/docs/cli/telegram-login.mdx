@@ -1,0 +1,36 @@
+---
+title: relay telegram login
+description: Connect a Telegram bot to the relay daemon.
+---
+
+# relay telegram login
+
+Connect a Telegram bot by providing a bot token from [@BotFather](https://t.me/BotFather). The token is verified against the Telegram API before being saved.
+
+```bash
+relay telegram login --token <BOT_TOKEN>
+```
+
+## Flags
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--token <token>` | Yes | Telegram bot token from @BotFather |
+
+## Output
+
+On success, displays the bot's username and name, then saves the token locally.
+
+```
+Bot verified successfully!
+  Username: @my_relay_bot
+  Name:     My Relay Bot
+
+Token saved. The daemon will use this on next start.
+```
+
+## Notes
+
+- The token is saved in `.relay-agent/telegram-auth/token.json` and persists across daemon restarts.
+- The daemon automatically reconnects to Telegram on startup if a saved token exists.
+- Users must message the bot on Telegram before relay can send them messages.

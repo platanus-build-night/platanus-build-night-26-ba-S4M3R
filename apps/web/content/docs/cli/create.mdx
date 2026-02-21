@@ -5,7 +5,7 @@ description: Create a new conversation instance.
 
 # relay create
 
-Create a new conversation instance.
+Create a new conversation instance. Supports WhatsApp, Telegram, and phone calls (via ElevenLabs).
 
 ```bash
 relay create \
@@ -25,5 +25,54 @@ relay create \
 | `--todos <items>` | Yes | Comma-separated list of todo items |
 | `--heartbeat-interval <ms>` | No | Heartbeat interval in milliseconds (default: 1800000 / 30 min) |
 | `--max-followups <n>` | No | Maximum number of follow-up attempts (default: 5) |
+| `--channel <type>` | No | `whatsapp` (default), `telegram`, or `phone` (ElevenLabs voice call) |
+| `--telegram-chat-id <id>` | No | Telegram chat ID (for telegram channel, if known) |
+
+### Phone channel flags
+
+These flags are required when `--channel phone` is set:
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--phone-number-id <id>` | Yes | ElevenLabs agent phone number ID (Twilio) |
+| `--first-message <text>` | Yes | First message the agent speaks when the call connects |
+| `--elevenlabs-api-key <key>` | No | ElevenLabs API key (or set `ELEVENLABS_API_KEY` env var) |
+| `--voice-id <id>` | No | ElevenLabs voice ID (defaults to Rachel) |
+| `--language <lang>` | No | Language code (default: `en`) |
 
 Returns a unique instance ID. If another instance for the same contact is already active, the new instance enters `QUEUED` state.
+
+## WhatsApp example
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time" \
+  --todos="ask ETA,confirm address"
+```
+
+## Telegram example
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time" \
+  --todos="ask ETA,confirm address" \
+  --channel=telegram
+```
+
+The contact must message the bot on Telegram first. You can optionally provide `--telegram-chat-id` if you already know the chat ID.
+
+## Phone call example
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time" \
+  --todos="ask ETA,confirm address" \
+  --channel=phone \
+  --phone-number-id=PN123abc \
+  --first-message="Hi, I'm calling about your delivery."
+```
+
+When using the phone channel, relay creates an ElevenLabs voice agent with a system prompt derived from the objective and todos, places the call via Twilio, and polls for completion. The call transcript is stored automatically when the call ends.

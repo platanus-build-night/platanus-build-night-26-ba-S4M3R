@@ -6,10 +6,12 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/reso
 import { AuthStorage } from '@mariozechner/pi-coding-agent';
 import type { ConversationInstance, RelayConfig, StateEvent, TranscriptMessage } from '../types.js';
 import * as WhatsApp from '../whatsapp/connection.js';
+import * as Telegram from '../telegram/connection.js';
 import * as InstanceStore from '../store/instances.js';
 import * as TranscriptStore from '../store/transcripts.js';
 import * as ConfigStore from '../store/config.js';
 import { transition } from '../engine/state-machine.js';
+import { createAgentAndCall } from '../elevenlabs/client.js';
 import logger from '../utils/logger.js';
 
 // ============================================
@@ -112,6 +114,20 @@ const TOOL_DEFS = [
       required: ['delay_ms'],
     },
   },
+  {
+    name: 'escalate_to_call',
+    description: 'Escalate the current WhatsApp conversation to a live phone call. Creates a voice agent with the full conversation context and calls the contact. Use when a phone call would be more effective than texting.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        reason: { type: 'string', description: 'Why you are escalating from WhatsApp to a phone call' },
+        extra_context: { type: 'string', description: 'Additional context or instructions for the voice agent beyond the conversation history' },
+        first_message: { type: 'string', description: 'The first thing the voice agent should say when the contact picks up' },
+        language: { type: 'string', description: 'Language code (e.g., "en", "es"). Defaults to "en"' },
+      },
+      required: ['reason', 'first_message'],
+    },
+  },
 ];
 
 // Anthropic format
@@ -144,7 +160,17 @@ async function executeTool(
   switch (toolName) {
     case 'send_message': {
       const text = input.text as string;
-      await WhatsApp.sendMessage(contactJid, text);
+      // Route to correct channel
+      const inst = await InstanceStore.getById(instanceId);
+      if (inst?.channel === 'telegram') {
+        const chatId = inst.telegram_chat_id ?? Telegram.getChatIdForPhone(inst.target_contact);
+        if (!chatId) {
+          return JSON.stringify({ success: false, error: 'No Telegram chat ID for this contact. The contact must message the bot first.' });
+        }
+        await Telegram.sendMessage(chatId, text);
+      } else {
+        await WhatsApp.sendMessage(contactJid, text);
+      }
       await TranscriptStore.append({
         instance_id: instanceId,
         role: 'agent',
@@ -195,6 +221,87 @@ async function executeTool(
       return JSON.stringify({ success: true, delay_ms });
     }
 
+    case 'escalate_to_call': {
+      const { reason, extra_context, first_message, language } = input as {
+        reason: string;
+        extra_context?: string;
+        first_message: string;
+        language?: string;
+      };
+
+      let apiKey = process.env.ELEVENLABS_API_KEY ?? null;
+      let phoneNumberId = process.env.ELEVENLABS_PHONE_NUMBER_ID ?? null;
+      if (!apiKey || !phoneNumberId) {
+        try {
+          const cfg = await ConfigStore.getConfig();
+          apiKey = apiKey ?? cfg.elevenlabs_api_key;
+          phoneNumberId = phoneNumberId ?? cfg.elevenlabs_phone_number_id;
+        } catch { /* ignore */ }
+      }
+      if (!apiKey) return JSON.stringify({ success: false, error: 'ElevenLabs API key not configured' });
+      if (!phoneNumberId) return JSON.stringify({ success: false, error: 'ElevenLabs phone number ID not configured' });
+
+      const instance = await InstanceStore.getById(instanceId);
+      if (!instance) return JSON.stringify({ success: false, error: 'Instance not found' });
+
+      const transcript = await TranscriptStore.getByInstance(instanceId);
+      const conversationHistory = transcript
+        .map((msg) => `[${msg.role === 'agent' ? 'You' : 'Contact'}]: ${msg.content}`)
+        .join('\n');
+
+      const todosFormatted = instance.todos
+        .map((t) => `- [${t.status}] ${t.text}`)
+        .join('\n');
+
+      const voicePrompt = [
+        `You are a voice agent continuing a conversation that was happening over WhatsApp.`,
+        `You are now calling the contact to continue the conversation by phone.`,
+        ``,
+        `OBJECTIVE: ${instance.objective}`,
+        ``,
+        `TODO LIST:`,
+        todosFormatted || '(no items)',
+        ``,
+        `REASON FOR CALLING: ${reason}`,
+        ``,
+        `PREVIOUS WHATSAPP CONVERSATION:`,
+        conversationHistory || '(no messages yet)',
+        extra_context ? `\nADDITIONAL CONTEXT:\n${extra_context}` : '',
+        ``,
+        `RULES:`,
+        `- Continue naturally from where the WhatsApp conversation left off`,
+        `- Reference previous messages if relevant`,
+        `- Be professional and concise`,
+        `- Focus on completing the objective and outstanding todo items`,
+      ].join('\n');
+
+      try {
+        const result = await createAgentAndCall(apiKey, {
+          prompt: voicePrompt,
+          first_message,
+          phone_number_id: phoneNumberId,
+          to_number: instance.target_contact,
+          language: language ?? 'en',
+          agent_name: `relay-escalation-${instanceId.slice(0, 8)}`,
+        });
+
+        await InstanceStore.update(instanceId, {
+          elevenlabs_data: {
+            agent_id: result.agent_id,
+            conversation_id: result.conversation_id,
+            call_sid: result.callSid,
+          },
+        });
+
+        logger.info({ instanceId, agent_id: result.agent_id, reason }, 'Escalated to phone call');
+        return JSON.stringify({ success: true, agent_id: result.agent_id, conversation_id: result.conversation_id });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        logger.error({ instanceId, error: msg }, 'escalate_to_call failed');
+        return JSON.stringify({ success: false, error: msg });
+      }
+    }
+
     default:
       return JSON.stringify({ success: false, error: `Unknown tool: ${toolName}` });
   }
@@ -231,7 +338,9 @@ export function buildSystemPrompt(
     .map((todo) => `- [${todo.status}] ${todo.text} (id: ${todo.id})`)
     .join('\n');
 
-  parts.push(`You are a conversation agent executing a specific objective via WhatsApp.
+  const channelName = instance.channel === 'telegram' ? 'Telegram' : 'WhatsApp';
+
+  parts.push(`You are a conversation agent executing a specific objective via ${channelName}.
 
 OBJECTIVE: ${instance.objective}
 
@@ -246,6 +355,7 @@ RULES:
 - Use mark_todo_item to update todo statuses when information is gathered
 - Use end_conversation when all todos are complete or the objective is fulfilled
 - If you cannot proceed, use request_human_intervention
+- If a phone call would be more effective (e.g., contact is unresponsive, complex discussion needed, or urgency requires it), use escalate_to_call to call the contact directly with full conversation context
 - Always call send_message to communicate — do NOT just produce text output`);
 
   return parts.join('\n\n');

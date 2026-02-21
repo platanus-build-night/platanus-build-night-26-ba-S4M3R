@@ -188,17 +188,22 @@ function LifecycleVisual() {
   );
 }
 
-/* ── 6. Escalation: channel transition ── */
+/* ── 6. Channels: multi-channel support ── */
 function EscalationVisual() {
   return (
-    <div className="flex items-center gap-3 text-[11px]">
+    <div className="flex items-center gap-2 text-[11px] flex-wrap">
       <div className="flex items-center gap-2 px-2 py-1.5 rounded-sm border border-accent/30 bg-accent/5">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         <span className="text-foreground/80">WhatsApp</span>
       </div>
-      <span className="text-muted/40">→</span>
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded-sm border border-accent/30 bg-accent/5">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent">
+          <path d="M21.198 2.433a2.242 2.242 0 0 0-1.022.215l-8.609 3.33c-2.068.8-4.133 1.598-6.2 2.4a.859.859 0 0 0 .009 1.617l5.253 2.091c.15.06.293.14.425.232l2.484 5.178a.856.856 0 0 0 1.59-.042l2.458-6.2 3.357-8.67a.744.744 0 0 0-.217-.689 1.093 1.093 0 0 0-.528-.262z" />
+        </svg>
+        <span className="text-foreground/80">Telegram</span>
+      </div>
       <div className="flex items-center gap-2 px-2 py-1.5 rounded-sm border border-glass-border">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted">
           <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
@@ -255,10 +260,10 @@ const FEATURES: FeatureData[] = [
     visual: LifecycleVisual,
   },
   {
-    name: "Text First, Call If Needed",
+    name: "WhatsApp, Telegram, or Phone",
     icon: IconEscalation,
     description:
-      "relay starts on WhatsApp. If the conversation needs a human voice, it can escalate to a call — same objective, same rules.",
+      "Pick the channel that fits. Text via WhatsApp or Telegram, call via ElevenLabs — same objective, same rules, same state machine.",
     visual: EscalationVisual,
   },
 ];

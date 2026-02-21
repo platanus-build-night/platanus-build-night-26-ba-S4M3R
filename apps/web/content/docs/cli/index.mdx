@@ -24,6 +24,7 @@ If no credentials are found, the daemon logs an error when attempting to create 
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Anthropic API key (used if no key set via `relay init`) |
 | `OPENAI_API_KEY` | OpenAI API key (used with `--provider openai`) |
+| `ELEVENLABS_API_KEY` | ElevenLabs API key (used for phone calls via `relay call` and `relay create --channel phone`) |
 
 ## Data Directory
 
@@ -34,6 +35,7 @@ relay stores all state in `.relay-agent/` relative to your working directory:
 ├── config.json          # API key, provider, daemon port
 ├── db.json              # Instance and transcript data (lowdb)
 ├── whatsapp-auth/       # Baileys v7 authentication state
+├── telegram-auth/       # Telegram bot token
 ├── logs/                # Daemon log files (pino)
 └── daemon.pid           # PID file for the running daemon
 ```

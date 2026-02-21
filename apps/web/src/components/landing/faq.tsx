@@ -22,7 +22,7 @@ const FAQS = [
   },
   {
     q: "What channels does relay support?",
-    a: "WhatsApp messaging, with voice call escalation. relay starts on chat and can switch to a call within the same conversation if needed.",
+    a: "WhatsApp, Telegram, and outbound phone calls via ElevenLabs. Each conversation runs on a single channel — pick the one that fits your use case.",
   },
   {
     q: "What if the person stops replying?",

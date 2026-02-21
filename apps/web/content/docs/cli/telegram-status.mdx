@@ -1,0 +1,34 @@
+---
+title: relay telegram status
+description: Check the Telegram bot connection status.
+---
+
+# relay telegram status
+
+Check whether a Telegram bot token is configured and verify the connection.
+
+```bash
+relay telegram status
+```
+
+## Flags
+
+None.
+
+## Output
+
+When connected:
+
+```
+Bot token found. Checking connection...
+
+Status:   Connected
+Username: @my_relay_bot
+Name:     My Relay Bot
+```
+
+When not configured:
+
+```
+Not configured. Run `relay-agent telegram login --token <TOKEN>` to set up.
+```

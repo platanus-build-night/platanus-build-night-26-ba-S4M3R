@@ -1,0 +1,48 @@
+---
+title: relay call
+description: Place an outbound phone call via ElevenLabs.
+---
+
+# relay call
+
+Place an outbound phone call using ElevenLabs Conversational AI. Creates a temporary voice agent with the given prompt and initiates the call via Twilio.
+
+```bash
+relay call "+56912345678" \
+  --phone-number-id=PN123abc \
+  --prompt="You are a delivery confirmation agent. Confirm the delivery window and address." \
+  --first-message="Hi, I'm calling from Acme Co about your delivery."
+```
+
+## Flags
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `<phone>` | Yes | Target phone number in E.164 format |
+| `--phone-number-id <id>` | Yes | ElevenLabs agent phone number ID (Twilio) |
+| `--prompt <text>` | Yes | System prompt for the voice agent |
+| `--first-message <text>` | Yes | First message the agent speaks when the call connects |
+| `--api-key <key>` | No | ElevenLabs API key (or set `ELEVENLABS_API_KEY` env var) |
+| `--voice-id <id>` | No | ElevenLabs voice ID (defaults to Rachel) |
+| `--language <lang>` | No | Language code (default: `en`) |
+
+## Output
+
+On success, returns:
+
+- **Agent ID** — the temporary ElevenLabs agent created for this call
+- **Conversation ID** — ElevenLabs conversation identifier
+- **Call SID** — Twilio call SID (if available)
+
+## Authentication
+
+The ElevenLabs API key is resolved in this order:
+
+1. `--api-key` flag
+2. `ELEVENLABS_API_KEY` environment variable
+
+## Notes
+
+- This command creates a standalone call without a relay conversation instance. For managed calls with objectives and todo tracking, use [`relay create --channel phone`](/docs/cli/create) instead.
+- Non-English languages automatically use the multilingual TTS model (`eleven_turbo_v2_5`).
+- Calls have a maximum duration of 10 minutes.

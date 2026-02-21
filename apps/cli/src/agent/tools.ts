@@ -1,10 +1,29 @@
 import { Type, type Static } from '@sinclair/typebox';
 import type { ToolDefinition, AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from '@mariozechner/pi-coding-agent';
 import * as WhatsApp from '../whatsapp/connection.js';
+import * as Telegram from '../telegram/connection.js';
 import * as TranscriptStore from '../store/transcripts.js';
 import * as InstanceStore from '../store/instances.js';
+import * as ConfigStore from '../store/config.js';
 import { transition } from '../engine/state-machine.js';
+import { createAgentAndCall } from '../elevenlabs/client.js';
 import logger from '../utils/logger.js';
+
+async function getElevenLabsConfig(): Promise<{ apiKey: string | null; phoneNumberId: string | null }> {
+  const envApiKey = process.env.ELEVENLABS_API_KEY ?? null;
+  const envPhoneId = process.env.ELEVENLABS_PHONE_NUMBER_ID ?? null;
+  if (envApiKey && envPhoneId) return { apiKey: envApiKey, phoneNumberId: envPhoneId };
+  try {
+    const config = await ConfigStore.getConfig();
+    const apiKey = envApiKey ?? config.elevenlabs_api_key ?? null;
+    const phoneNumberId = envPhoneId ?? config.elevenlabs_phone_number_id ?? null;
+    logger.info({ hasApiKey: !!apiKey, hasPhoneId: !!phoneNumberId, source: 'config' }, 'ElevenLabs config resolved');
+    return { apiKey, phoneNumberId };
+  } catch (err) {
+    logger.error({ err }, 'Failed to read ElevenLabs config from store');
+    return { apiKey: envApiKey, phoneNumberId: envPhoneId };
+  }
+}
 
 // ============================================
 // Tool Context
@@ -53,7 +72,18 @@ const ScheduleNextHeartbeatParams = Type.Object({
   delay_ms: Type.Number({ description: 'Delay in milliseconds before the next heartbeat fires' }),
 });
 
-const PlaceCallParams = Type.Object({});
+const PlaceCallParams = Type.Object({
+  to_number: Type.String({ description: 'Phone number to call in E.164 format (e.g., "+16282276008")' }),
+  prompt: Type.String({ description: 'System prompt for the voice agent' }),
+  first_message: Type.String({ description: 'First message the agent says when the call connects' }),
+});
+
+const EscalateToCallParams = Type.Object({
+  reason: Type.String({ description: 'Why you are escalating from WhatsApp to a phone call' }),
+  extra_context: Type.Optional(Type.String({ description: 'Additional context or instructions for the voice agent beyond the conversation history' })),
+  first_message: Type.String({ description: 'The first thing the voice agent should say when the contact picks up' }),
+  language: Type.Optional(Type.String({ description: 'Language code (e.g., "en", "es"). Defaults to "en"' })),
+});
 
 // ============================================
 // Helper: Build a text-only AgentToolResult
@@ -85,7 +115,17 @@ function createSendMessageTool(ctx: ToolContext): ToolDefinition {
     ): Promise<AgentToolResult<unknown>> {
       const { text } = params;
 
-      await WhatsApp.sendMessage(ctx.contactJid, text);
+      // Route to correct channel
+      const inst = await InstanceStore.getById(ctx.instanceId);
+      if (inst?.channel === 'telegram') {
+        const chatId = inst.telegram_chat_id ?? Telegram.getChatIdForPhone(inst.target_contact);
+        if (!chatId) {
+          return textResult(JSON.stringify({ success: false, error: 'No Telegram chat ID for this contact. The contact must message the bot first.' }), undefined);
+        }
+        await Telegram.sendMessage(chatId, text);
+      } else {
+        await WhatsApp.sendMessage(ctx.contactJid, text);
+      }
 
       await TranscriptStore.append({
         instance_id: ctx.instanceId,
@@ -280,28 +320,157 @@ function createScheduleNextHeartbeatTool(ctx: ToolContext): ToolDefinition {
   };
 }
 
-function createPlaceCallTool(_ctx: ToolContext): ToolDefinition {
+function createPlaceCallTool(ctx: ToolContext): ToolDefinition {
   return {
     name: 'place_call',
     label: 'Place Call',
-    description: 'Place a voice call to the contact. NOT AVAILABLE in v1 -- this tool is a stub.',
+    description: 'Place an outbound voice call via ElevenLabs. Creates a temporary voice agent with the given prompt, then calls the number. Requires ELEVENLABS_API_KEY and ELEVENLABS_PHONE_NUMBER_ID env vars.',
     parameters: PlaceCallParams,
     async execute(
       _toolCallId: string,
-      _params: Static<typeof PlaceCallParams>,
+      params: Static<typeof PlaceCallParams>,
       _signal: AbortSignal | undefined,
       _onUpdate: AgentToolUpdateCallback | undefined,
       _extCtx: ExtensionContext,
     ): Promise<AgentToolResult<unknown>> {
-      logger.info('place_call tool invoked but is not available in v1');
+      const { to_number, prompt, first_message } = params;
 
-      return textResult(
-        JSON.stringify({
-          success: false,
-          message: 'Feature not yet available. Voice calls are planned for a future release.',
-        }),
-        undefined,
-      );
+      const { apiKey, phoneNumberId } = await getElevenLabsConfig();
+      if (!apiKey) {
+        logger.error('place_call: ELEVENLABS_API_KEY not configured');
+        return textResult(
+          JSON.stringify({ success: false, error: 'ElevenLabs API key is not configured. Set ELEVENLABS_API_KEY env var or store it in config.' }),
+          undefined,
+        );
+      }
+      if (!phoneNumberId) {
+        logger.error('place_call: ELEVENLABS_PHONE_NUMBER_ID not configured');
+        return textResult(
+          JSON.stringify({ success: false, error: 'ElevenLabs phone number ID is not configured. Set ELEVENLABS_PHONE_NUMBER_ID env var or store it in config.' }),
+          undefined,
+        );
+      }
+
+      try {
+        const result = await createAgentAndCall(apiKey, {
+          prompt,
+          first_message,
+          phone_number_id: phoneNumberId,
+          to_number,
+        });
+
+        logger.info(
+          { instanceId: ctx.instanceId, to_number, agent_id: result.agent_id, conversation_id: result.conversation_id },
+          'Agent created and call placed via place_call tool',
+        );
+
+        return textResult(
+          JSON.stringify({ success: true, agent_id: result.agent_id, conversation_id: result.conversation_id }),
+          undefined,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        logger.error({ instanceId: ctx.instanceId, to_number, error: message }, 'place_call failed');
+        return textResult(
+          JSON.stringify({ success: false, error: message }),
+          undefined,
+        );
+      }
+    },
+  };
+}
+
+function createEscalateToCallTool(ctx: ToolContext): ToolDefinition {
+  return {
+    name: 'escalate_to_call',
+    label: 'Escalate to Phone Call',
+    description: 'Escalate the current WhatsApp conversation to a live phone call. Creates an ElevenLabs voice agent with the full conversation context and calls the contact. Requires ELEVENLABS_API_KEY and ELEVENLABS_PHONE_NUMBER_ID env vars.',
+    parameters: EscalateToCallParams,
+    async execute(
+      _toolCallId: string,
+      params: Static<typeof EscalateToCallParams>,
+      _signal: AbortSignal | undefined,
+      _onUpdate: AgentToolUpdateCallback | undefined,
+      _extCtx: ExtensionContext,
+    ): Promise<AgentToolResult<unknown>> {
+      const { reason, extra_context, first_message, language } = params;
+
+      const { apiKey, phoneNumberId } = await getElevenLabsConfig();
+      if (!apiKey) {
+        return textResult(JSON.stringify({ success: false, error: 'ElevenLabs API key is not configured. Set ELEVENLABS_API_KEY env var or store it in config.' }), undefined);
+      }
+      if (!phoneNumberId) {
+        return textResult(JSON.stringify({ success: false, error: 'ElevenLabs phone number ID is not configured. Set ELEVENLABS_PHONE_NUMBER_ID env var or store it in config.' }), undefined);
+      }
+
+      try {
+        const instance = await InstanceStore.getById(ctx.instanceId);
+        if (!instance) {
+          return textResult(JSON.stringify({ success: false, error: 'Instance not found' }), undefined);
+        }
+
+        const transcript = await TranscriptStore.getByInstance(ctx.instanceId);
+        const conversationHistory = transcript
+          .map((msg) => `[${msg.role === 'agent' ? 'You' : 'Contact'}]: ${msg.content}`)
+          .join('\n');
+
+        const todosFormatted = instance.todos
+          .map((t) => `- [${t.status}] ${t.text}`)
+          .join('\n');
+
+        const voicePrompt = [
+          `You are a voice agent continuing a conversation that was happening over WhatsApp.`,
+          `You are now calling the contact to continue the conversation by phone.`,
+          ``,
+          `OBJECTIVE: ${instance.objective}`,
+          ``,
+          `TODO LIST:`,
+          todosFormatted || '(no items)',
+          ``,
+          `REASON FOR CALLING: ${reason}`,
+          ``,
+          `PREVIOUS WHATSAPP CONVERSATION:`,
+          conversationHistory || '(no messages yet)',
+          extra_context ? `\nADDITIONAL CONTEXT:\n${extra_context}` : '',
+          ``,
+          `RULES:`,
+          `- Continue naturally from where the WhatsApp conversation left off`,
+          `- Reference previous messages if relevant`,
+          `- Be professional and concise`,
+          `- Focus on completing the objective and outstanding todo items`,
+        ].join('\n');
+
+        const result = await createAgentAndCall(apiKey, {
+          prompt: voicePrompt,
+          first_message,
+          phone_number_id: phoneNumberId,
+          to_number: instance.target_contact,
+          language: language ?? 'en',
+          agent_name: `relay-escalation-${ctx.instanceId.slice(0, 8)}`,
+        });
+
+        await InstanceStore.update(ctx.instanceId, {
+          elevenlabs_data: {
+            agent_id: result.agent_id,
+            conversation_id: result.conversation_id,
+            call_sid: result.callSid,
+          },
+        });
+
+        logger.info(
+          { instanceId: ctx.instanceId, agent_id: result.agent_id, conversation_id: result.conversation_id, reason },
+          'Escalated WhatsApp conversation to phone call',
+        );
+
+        return textResult(
+          JSON.stringify({ success: true, agent_id: result.agent_id, conversation_id: result.conversation_id }),
+          undefined,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        logger.error({ instanceId: ctx.instanceId, error: message }, 'escalate_to_call failed');
+        return textResult(JSON.stringify({ success: false, error: message }), undefined);
+      }
     },
   };
 }
@@ -327,5 +496,6 @@ export function createConversationTools(context: ToolContext): ToolDefinition[] 
     createRequestHumanInterventionTool(context),
     createScheduleNextHeartbeatTool(context),
     createPlaceCallTool(context),
+    createEscalateToCallTool(context),
   ];
 }

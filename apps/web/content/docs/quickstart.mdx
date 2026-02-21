@@ -5,7 +5,7 @@ description: Get relay running in under 10 minutes.
 
 # Quickstart
 
-Get relay running and create your first WhatsApp conversation.
+Get relay running and create your first conversation — via WhatsApp, Telegram, or phone call.
 
 ## 1. Connect WhatsApp
 
@@ -31,7 +31,7 @@ Launch the persistent background process:
 relay start
 ```
 
-The daemon runs on `localhost:3214` and maintains the WhatsApp connection. All CLI commands communicate with the daemon via HTTP.
+The daemon runs on `localhost:3214` and maintains channel connections (WhatsApp, Telegram, phone). All CLI commands communicate with the daemon via HTTP.
 
 ## 3. Configure API Credentials
 
@@ -103,3 +103,95 @@ relay stop
 ```
 
 All state is flushed to disk and persists for the next session.
+
+## Telegram
+
+relay supports Telegram as a conversation channel via a bot powered by the [grammY](https://grammy.dev) framework.
+
+### Prerequisites
+
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+
+### Connect the bot
+
+```bash
+relay telegram login --token <BOT_TOKEN>
+```
+
+The token is verified against the Telegram API and saved locally in `.relay-agent/telegram-auth/`. The daemon auto-reconnects on restart.
+
+Check the bot status at any time:
+
+```bash
+relay telegram status
+```
+
+### Create a Telegram conversation
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time for order #4421" \
+  --todos="ask preferred time,confirm address" \
+  --channel=telegram
+```
+
+The contact must message the bot on Telegram to start receiving replies. When the user sends a message, relay maps their chat ID to the instance and routes replies through the bot.
+
+You can also provide a known chat ID directly:
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time" \
+  --todos="ask ETA,confirm address" \
+  --channel=telegram \
+  --telegram-chat-id=123456789
+```
+
+### Disconnect
+
+```bash
+relay telegram logout
+```
+
+## Phone Calls (ElevenLabs)
+
+relay also supports outbound phone calls via ElevenLabs Conversational AI. Calls use Twilio for telephony and ElevenLabs for the voice agent.
+
+### Prerequisites
+
+- An [ElevenLabs](https://elevenlabs.io) account with Conversational AI enabled
+- A Twilio phone number connected to your ElevenLabs account
+- Set your API key:
+
+```bash
+export ELEVENLABS_API_KEY=your-key-here
+```
+
+### Quick call (standalone)
+
+Place a one-off call without instance tracking:
+
+```bash
+relay call "+56912345678" \
+  --phone-number-id=PN123abc \
+  --prompt="Confirm the delivery window for order #4421" \
+  --first-message="Hi, I'm calling from Acme Co about your delivery."
+```
+
+### Managed call (with instance tracking)
+
+Create a full conversation instance on the phone channel — with objectives, todos, and transcript storage:
+
+```bash
+relay create \
+  --contact="+56912345678" \
+  --objective="confirm delivery time for order #4421" \
+  --todos="ask preferred time,confirm address" \
+  --channel=phone \
+  --phone-number-id=PN123abc \
+  --first-message="Hi, I'm calling about your recent order."
+```
+
+The daemon polls ElevenLabs for call status. When the call ends, the transcript is stored and the instance transitions to `COMPLETED` or `FAILED`.

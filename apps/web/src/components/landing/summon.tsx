@@ -87,11 +87,11 @@ export function Summon() {
         {/* Section header */}
         <div className="mb-8 text-center">
           <h2 className="text-xl md:text-2xl font-semibold text-foreground tracking-tight">
-            summon relay from your agent
+            give your agent a little brother
           </h2>
           <p className="mt-2 text-sm text-muted/70 max-w-md mx-auto">
-            send this message to your agent. it will fetch the setup
-            instructions and configure a relay-agent for you.
+            paste this into your coding agent. it&apos;ll set up relay — a
+            second agent that handles all the talking-to-humans part.
           </p>
         </div>
 

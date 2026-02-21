@@ -16,11 +16,22 @@
   /* fumadocs theme overrides */
   --color-fd-background: #0a0a0a;
   --color-fd-foreground: #ededed;
-  --color-fd-muted: #9A9590;
-  --color-fd-muted-foreground: #706b66;
+  --color-fd-muted: #737373;
+  --color-fd-muted-foreground: #525252;
   --color-fd-border: rgba(255, 255, 255, 0.1);
   --color-fd-accent: #3B82F6;
   --color-fd-accent-foreground: #ededed;
+
+  /* fumadocs component overrides */
+  --color-fd-card: rgba(255, 255, 255, 0.03);
+  --color-fd-card-foreground: #ededed;
+  --color-fd-popover: #111111;
+  --color-fd-popover-foreground: #ededed;
+  --color-fd-secondary: rgba(255, 255, 255, 0.05);
+  --color-fd-secondary-foreground: #ededed;
+  --color-fd-ring: rgba(59, 130, 246, 0.3);
+  --color-fd-primary: #3B82F6;
+  --color-fd-primary-foreground: #ededed;
 }
 
 @theme inline {
@@ -53,4 +64,151 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
+}
+
+/* --- fumadocs brand alignment --- */
+
+/* Sidebar */
+[data-fumadocs-sidebar] {
+  background: rgba(10, 10, 10, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Sidebar links */
+[data-fumadocs-sidebar] a {
+  font-family: var(--font-mono) !important;
+  font-size: 0.8125rem !important;
+  border-radius: 2px !important;
+}
+
+[data-fumadocs-sidebar] a[data-active="true"] {
+  background: rgba(59, 130, 246, 0.08) !important;
+  color: #3B82F6 !important;
+  border-left: 2px solid #3B82F6;
+}
+
+/* TOC (table of contents) */
+[data-fumadocs-toc] a[data-active="true"] {
+  color: #3B82F6 !important;
+}
+
+/* Code blocks — terminal style + Shiki variable overrides */
+pre.shiki {
+  --shiki-dark-bg: #111 !important;
+  --shiki-light-bg: #111 !important;
+}
+
+/* When pre is inside a figure wrapper, strip pre border — figure is the box */
+[data-fumadocs-body] figure pre,
+[data-fumadocs-body] figure[data-rehype-pretty-code-figure] pre,
+[data-fumadocs-body] [data-rehype-pretty-code-figure] pre {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono) !important;
+}
+
+/* Standalone pre (no figure wrapper) */
+[data-fumadocs-body] > pre,
+[data-fumadocs-body] pre:not(figure pre),
+pre.shiki:not(figure pre) {
+  background: #111 !important;
+  background-color: #111 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 2px !important;
+  font-family: var(--font-mono) !important;
+}
+
+/* Code block wrapper / figure — single box */
+[data-fumadocs-body] figure[data-rehype-pretty-code-figure],
+[data-fumadocs-body] [data-rehype-pretty-code-figure],
+[data-fumadocs-body] figure:has(pre) {
+  background: #111 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 2px !important;
+  overflow: hidden;
+}
+
+/* Inner code element — always transparent */
+[data-fumadocs-body] pre code,
+pre.shiki code {
+  background: transparent !important;
+}
+
+/* Inline code */
+[data-fumadocs-body] :not(pre) > code {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 2px !important;
+  padding: 0.15em 0.4em !important;
+  font-size: 0.875em !important;
+  color: #ededed !important;
+}
+
+/* Copy button inside code blocks */
+[data-fumadocs-body] pre button,
+[data-fumadocs-body] figure button {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+[data-fumadocs-body] pre button:hover,
+[data-fumadocs-body] figure button:hover {
+  color: #ededed !important;
+}
+
+/* Tables */
+[data-fumadocs-body] table {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-fumadocs-body] th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 0.8125rem !important;
+  color: #9A9590 !important;
+}
+
+[data-fumadocs-body] td {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Blockquotes */
+[data-fumadocs-body] blockquote {
+  border-left-color: #3B82F6 !important;
+  background: rgba(59, 130, 246, 0.04) !important;
+  border-radius: 0 2px 2px 0 !important;
+}
+
+/* Headings */
+[data-fumadocs-body] h1,
+[data-fumadocs-body] h2,
+[data-fumadocs-body] h3,
+[data-fumadocs-body] h4 {
+  font-family: var(--font-mono) !important;
+  letter-spacing: -0.02em;
+}
+
+/* Links */
+[data-fumadocs-body] a {
+  color: #3B82F6 !important;
+  text-decoration: none !important;
+}
+
+[data-fumadocs-body] a:hover {
+  text-decoration: underline !important;
+}
+
+/* Navbar */
+nav[data-fumadocs-nav] {
+  background: rgba(10, 10, 10, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Search */
+[data-fumadocs-search] {
+  font-family: var(--font-mono) !important;
 }

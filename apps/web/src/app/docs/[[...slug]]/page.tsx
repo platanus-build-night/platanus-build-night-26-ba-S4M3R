@@ -1,6 +1,7 @@
 import { source } from "@/lib/source";
 import { DocsPage, DocsBody } from "fumadocs-ui/layouts/docs/page";
 import { notFound } from "next/navigation";
+import { CopyForAgents } from "@/components/docs/copy-for-agents";
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -10,10 +11,14 @@ export default async function Page(props: {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const slugStr = params.slug?.join("/") ?? "";
 
   return (
     <DocsPage toc={page.data.toc}>
       <DocsBody>
+        <div className="flex items-center justify-end mb-4 -mt-2">
+          <CopyForAgents slug={slugStr} />
+        </div>
         <MDX />
       </DocsBody>
     </DocsPage>

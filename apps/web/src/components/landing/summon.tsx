@@ -134,10 +134,10 @@ export function Summon() {
           <motion.div
             className="relative rounded-sm border transition-colors duration-300 cursor-pointer group"
             style={{
-              background: copied ? "rgba(59, 130, 246, 0.06)" : "#111",
+              background: copied ? "rgba(59, 130, 246, 0.06)" : "transparent",
               borderColor: copied
                 ? "rgba(59, 130, 246, 0.25)"
-                : "rgba(255, 255, 255, 0.1)",
+                : "rgba(59, 130, 246, 0.08)",
             }}
             onClick={handleCopy}
             whileTap={{ scale: 0.985 }}

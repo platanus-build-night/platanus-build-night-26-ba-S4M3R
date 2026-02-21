@@ -8,30 +8,11 @@
   --muted: #9A9590;
   --accent: #3B82F6;
   --accent-glow: rgba(59, 130, 246, 0.10);
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-bg-hover: rgba(255, 255, 255, 0.08);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(59, 130, 246, 0.03);
+  --glass-bg-hover: rgba(59, 130, 246, 0.06);
+  --glass-border: rgba(59, 130, 246, 0.08);
   --glass-blur: 12px;
 
-  /* fumadocs theme overrides */
-  --color-fd-background: #0a0a0a;
-  --color-fd-foreground: #ededed;
-  --color-fd-muted: #737373;
-  --color-fd-muted-foreground: #525252;
-  --color-fd-border: rgba(255, 255, 255, 0.1);
-  --color-fd-accent: #3B82F6;
-  --color-fd-accent-foreground: #ededed;
-
-  /* fumadocs component overrides */
-  --color-fd-card: rgba(255, 255, 255, 0.03);
-  --color-fd-card-foreground: #ededed;
-  --color-fd-popover: #111111;
-  --color-fd-popover-foreground: #ededed;
-  --color-fd-secondary: rgba(255, 255, 255, 0.05);
-  --color-fd-secondary-foreground: #ededed;
-  --color-fd-ring: rgba(59, 130, 246, 0.3);
-  --color-fd-primary: #3B82F6;
-  --color-fd-primary-foreground: #ededed;
 }
 
 @theme inline {
@@ -72,7 +53,7 @@ body::before {
 [data-fumadocs-sidebar] {
   background: rgba(10, 10, 10, 0.95) !important;
   backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-right: 1px solid rgba(59, 130, 246, 0.08) !important;
 }
 
 /* Sidebar links */
@@ -95,8 +76,8 @@ body::before {
 
 /* Code blocks — terminal style + Shiki variable overrides */
 pre.shiki {
-  --shiki-dark-bg: #111 !important;
-  --shiki-light-bg: #111 !important;
+  --shiki-dark-bg: #0a0a0a !important;
+  --shiki-light-bg: #0a0a0a !important;
 }
 
 /* When pre is inside a figure wrapper, strip pre border — figure is the box */
@@ -114,9 +95,9 @@ pre.shiki {
 [data-fumadocs-body] > pre,
 [data-fumadocs-body] pre:not(figure pre),
 pre.shiki:not(figure pre) {
-  background: #111 !important;
-  background-color: #111 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 1px solid rgba(59, 130, 246, 0.06) !important;
   border-radius: 2px !important;
   font-family: var(--font-mono) !important;
 }
@@ -125,8 +106,8 @@ pre.shiki:not(figure pre) {
 [data-fumadocs-body] figure[data-rehype-pretty-code-figure],
 [data-fumadocs-body] [data-rehype-pretty-code-figure],
 [data-fumadocs-body] figure:has(pre) {
-  background: #111 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: transparent !important;
+  border: 1px solid rgba(59, 130, 246, 0.06) !important;
   border-radius: 2px !important;
   overflow: hidden;
 }
@@ -139,18 +120,18 @@ pre.shiki code {
 
 /* Inline code */
 [data-fumadocs-body] :not(pre) > code {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: transparent !important;
+  border: 1px solid rgba(59, 130, 246, 0.08) !important;
   border-radius: 2px !important;
   padding: 0.15em 0.4em !important;
   font-size: 0.875em !important;
-  color: #ededed !important;
+  color: #3B82F6 !important;
 }
 
 /* Copy button inside code blocks */
 [data-fumadocs-body] pre button,
 [data-fumadocs-body] figure button {
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: rgba(59, 130, 246, 0.35) !important;
 }
 
 [data-fumadocs-body] pre button:hover,
@@ -160,19 +141,19 @@ pre.shiki code {
 
 /* Tables */
 [data-fumadocs-body] table {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(59, 130, 246, 0.06) !important;
 }
 
 [data-fumadocs-body] th {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: transparent !important;
+  border-color: rgba(59, 130, 246, 0.06) !important;
   font-family: var(--font-mono) !important;
   font-size: 0.8125rem !important;
   color: #9A9590 !important;
 }
 
 [data-fumadocs-body] td {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(59, 130, 246, 0.06) !important;
 }
 
 /* Blockquotes */
@@ -205,7 +186,7 @@ pre.shiki code {
 nav[data-fumadocs-nav] {
   background: rgba(10, 10, 10, 0.8) !important;
   backdrop-filter: blur(12px) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.08) !important;
 }
 
 /* Search */

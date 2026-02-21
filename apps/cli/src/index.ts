@@ -14,6 +14,7 @@ import { registerPauseCommand } from './commands/pause.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerSendCommand } from './commands/send.js';
 import { registerLoginCommand } from './commands/login.js';
+import { registerConfigCommand } from './commands/config.js';
 
 const program = new Command();
 
@@ -35,5 +36,6 @@ registerPauseCommand(program);
 registerResumeCommand(program);
 registerSendCommand(program);
 registerLoginCommand(program);
+registerConfigCommand(program);
 
 program.parse();

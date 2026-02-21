@@ -208,6 +208,7 @@ function startQrServer(port: number): QrServer {
 
 interface ConnectOptions {
   browser?: boolean;
+  code?: string;
 }
 
 async function connectWithRetry(isRetry = false, opts: ConnectOptions = {}): Promise<void> {
@@ -226,13 +227,34 @@ async function connectWithRetry(isRetry = false, opts: ConnectOptions = {}): Pro
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const baileysLogger = pino({ level: 'silent' });
 
+  const usePairingCode = !!opts.code;
+
   const sock = makeWASocket({
     auth: state,
     logger: baileysLogger as never,
-    qrTimeout: 60_000,
+    qrTimeout: usePairingCode ? undefined : 60_000,
+    printQRInTerminal: false,
   });
 
   sock.ev.on('creds.update', saveCreds);
+
+  // Request pairing code if --code flag was used
+  if (usePairingCode) {
+    // Wait briefly for the socket to be ready before requesting pairing code
+    setTimeout(async () => {
+      try {
+        const phoneNumber = opts.code!.replace(/[^0-9]/g, '');
+        const code = await sock.requestPairingCode(phoneNumber);
+        console.log(`\nYour pairing code: ${code}\n`);
+        console.log('On your phone: WhatsApp > Linked Devices > Link a Device > Link with phone number');
+        console.log('Enter the code shown above.\n');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`Failed to request pairing code: ${msg}`);
+        sock.end(undefined);
+      }
+    }, 3000);
+  }
 
   return new Promise<void>((resolve, reject) => {
     let qrCount = 0;
@@ -240,13 +262,13 @@ async function connectWithRetry(isRetry = false, opts: ConnectOptions = {}): Pro
       sock.end(undefined);
       qrServer?.notify('error_msg', 'QR code scan timed out. Run relay-agent whatsapp login to try again.');
       setTimeout(() => qrServer?.close(), 2000);
-      reject(new Error('QR code scan timed out. Run `relay-agent whatsapp login` to try again.'));
+      reject(new Error('Login timed out. Run `relay-agent whatsapp login` to try again.'));
     }, 120_000);
 
     sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
       const { connection, lastDisconnect, qr } = update;
 
-      if (qr) {
+      if (qr && !usePairingCode) {
         qrCount++;
 
         // Terminal rendering
@@ -311,23 +333,26 @@ export function registerLoginCommand(program: Command): void {
 
   whatsapp
     .command('login')
-    .description('Connect WhatsApp by scanning QR code')
+    .description('Connect WhatsApp by scanning QR code or using a pairing code')
     .option('--browser', 'Open QR code in browser for easier scanning')
-    .action(async (options: { browser?: boolean }) => {
+    .option('--code <phone>', 'Link with pairing code instead of QR (use international format, e.g. +56912345678)')
+    .action(async (options: { browser?: boolean; code?: string }) => {
       const baseDir = path.resolve('.relay-agent');
       if (!fs.existsSync(baseDir)) {
         fs.mkdirSync(baseDir, { recursive: true });
       }
 
       console.log('Starting WhatsApp authentication...');
-      if (options.browser) {
+      if (options.code) {
+        console.log('Requesting pairing code for %s...', options.code);
+      } else if (options.browser) {
         console.log('Opening QR code in browser...\n');
       } else {
         console.log('A QR code will appear below. Scan it with your WhatsApp app.');
         console.log('Tip: use --browser to open the QR in your browser instead.\n');
       }
 
-      await connectWithRetry(false, { browser: options.browser });
+      await connectWithRetry(false, { browser: options.browser, code: options.code });
     });
 
   whatsapp
